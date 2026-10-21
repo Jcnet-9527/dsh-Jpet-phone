@@ -1,3 +1,14 @@
 node_modules/
 *.log
 .DS_Store
+
+# ---- 安卓原生 App 工程（android-app/）----
+android-app/android/build/
+android-app/android/.gradle/
+android-app/android/local.properties
+android-app/dist-remote/
+android-app/dist-android/
+android-app/**/__pycache__/
+android-app/assets/characters/shenshen/frameseq/
+android-app/assets/characters/shenshen/videos/**/*.webm
+*.apk
