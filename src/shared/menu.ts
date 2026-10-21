@@ -280,20 +280,28 @@ export function mountContextMenu(opts: {
   rootPanel.style.top = Math.max(c.y + 4, Math.min(y, c.y + c.h - rh - 4)) + 'px';
 
   // 指针整体离开菜单树（离开全部面板的并集）→ 200ms 后关闭整棵菜单；
-  // 期间任何指针移动（mouseover 冒泡到 root）都视为仍在菜单内，取消关闭
-  root.addEventListener('mouseleave', () => {
-    if (leaveTimer !== null) window.clearTimeout(leaveTimer);
-    leaveTimer = window.setTimeout(() => {
-      leaveTimer = null;
-      close();
-    }, 200);
-  });
-  root.addEventListener('mouseover', () => {
-    if (leaveTimer !== null) {
-      window.clearTimeout(leaveTimer);
-      leaveTimer = null;
-    }
-  });
+  // 期间任何指针移动（mouseover 冒泡到 root）都视为仍在菜单内，取消关闭。
+  // 手机版适配：触屏（pointer:coarse）**禁用**这条 mouseleave 自动关闭——
+  // 触屏每次点按后浏览器都会补发合成 mouseleave，200ms 后菜单整个消失，
+  // 用户来不及点开二级/三级子面板（「玩耍/小动作/点击回应」里的动画列表
+  // 因此看起来"丢失"）。触屏改由「点菜单外 / Esc / 点菜单项」三条原路径关闭。
+  const coarsePointer =
+    typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches;
+  if (!coarsePointer) {
+    root.addEventListener('mouseleave', () => {
+      if (leaveTimer !== null) window.clearTimeout(leaveTimer);
+      leaveTimer = window.setTimeout(() => {
+        leaveTimer = null;
+        close();
+      }, 200);
+    });
+    root.addEventListener('mouseover', () => {
+      if (leaveTimer !== null) {
+        window.clearTimeout(leaveTimer);
+        leaveTimer = null;
+      }
+    });
+  }
 
   const onDocPointerDown = (e: MouseEvent): void => {
     if (closed) return;

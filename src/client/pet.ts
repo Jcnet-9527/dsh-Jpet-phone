@@ -103,6 +103,13 @@ const clampPetSize = (s: number): number => {
 /** 余额气泡展示时长（ms）：定时自动消失，与动画生命周期解耦 */
 const BUBBLE_DURATION_MS = 10 * 1000;
 
+/**
+ * 触屏拖拽阈值（手机适配）：手指轻点时 5~10px 的自然抖动不该进入拖拽，
+ * 只有明确的大幅移动才判定为拖拽意图；鼠标/笔仍用原 DRAG_THRESHOLD（5px）。
+ * 同时是「长按菜单弹出后继续移动多远转为拖拽并关掉菜单」的判定阈值。
+ */
+const TOUCH_DRAG_THRESHOLD = 12;
+
 /** 内联 CSS —— 注入一次（官方插件标准做法） */
 const css = [
   '.dsh-pet-root{position:fixed;z-index:40;pointer-events:none;user-select:none}',
@@ -254,6 +261,10 @@ export function makePetUI(rt: {
       offY: 0,
       // 触屏长按定时器（只有触摸/笔走这条路径，见 handlePointerDown）；null = 当前没有待触发的长按
       lpTimer: null as ReturnType<typeof setTimeout> | null,
+      // 触屏专属：长按已弹出菜单，但指针仍未松开（保留 pointer capture）。
+      // 此时手指继续移动超过 TOUCH_DRAG_THRESHOLD 即关掉菜单、原地转入拖拽——
+      // 「按住 → 菜单弹出 → 继续移动」是触屏拖拽的自然手势，不能因菜单弹出而废掉拖拽。
+      menued: false,
     });
     const justDraggedRef = useRef(false);
     // 拖拽抛掷物理状态：轨迹样本 / 包围盒左上角实时 px / 弹簧目标与速度 / 弹簧跟随 rAF / 抛掷 rAF
@@ -1238,19 +1249,21 @@ export function makePetUI(rt: {
       dragRef.current = { active: true, dragging: false, sx: e.clientX, sy: e.clientY, offX, offY, lpTimer: null };
       // 触屏长按 500ms 打开右键菜单：复用同一套按下判定。手指移动超过 8px 即取消；
       // 鼠标与笔不走这条分支（它们本来就有右键，无需长按替代）。
+      // 手机版适配：菜单弹出后**不释放指针捕获、不结束按压**（menued=true）——
+      // 手指继续移动 >TOUCH_DRAG_THRESHOLD 时由 handlePointerMove 关掉菜单转入拖拽；
+      // 松手则维持原行为（菜单保留，既不抛掷也不播点击动画）。
       if (e.pointerType !== 'mouse' && e.pointerType !== 'pen') {
         const lpEl = e.currentTarget;
-        const lpId = e.pointerId;
         const lpX = e.clientX;
         const lpY = e.clientY;
         dragRef.current.lpTimer = setTimeout(() => {
           dragRef.current.lpTimer = null;
           const dl = dragRef.current;
           if (!dl.active || dl.dragging) return;
-          // 结束本次按压：松手时既不抛掷也不播点击动画（pressScoreFiredRef 标记为已处理）
-          dl.active = false;
+          // 标记：本次按压已由长按菜单处理（松手不触发点击动画），
+          // 但保持 active + capture，让「继续移动 → 恢复拖拽」成为可能。
+          dl.menued = true;
           pressScoreFiredRef.current = true;
-          if (lpEl.hasPointerCapture(lpId)) lpEl.releasePointerCapture(lpId);
           console.log('[dsh-pet] ' + new Date().toTimeString().slice(0, 8) + ' pet=' + cfg.id + ' -> [TOUCH-MENU]');
           // 与鼠标右键同一个入口：派发 contextmenu 交给 handleContextMenu
           lpEl.dispatchEvent(
@@ -1278,8 +1291,19 @@ export function makePetUI(rt: {
         clearTimeout(d.lpTimer);
         d.lpTimer = null;
       }
+      // 手机版适配：长按菜单已弹出但手指未松——继续移动超过触屏拖拽阈值即关掉菜单、
+      // 原地转入拖拽（active/capture 一直在，下方的常规拖拽分支自然接管）。
+      if (d.menued && Math.hypot(dx, dy) >= TOUCH_DRAG_THRESHOLD) {
+        d.menued = false;
+        if (menuRef.current) menuRef.current.close();
+        console.log('[dsh-pet] ' + new Date().toTimeString().slice(0, 8) + ' pet=' + cfg.id + ' -> [TOUCH-MENU-CLOSE-DRAG]');
+      }
+      // 手机版适配：触屏拖拽阈值更大（手指轻点时 5~10px 的自然抖动不应进入拖拽，
+      // 只有明确的大幅移动才算拖拽意图）；鼠标/笔维持原 5px 灵敏度不变。
+      const isTouch = e.pointerType !== 'mouse' && e.pointerType !== 'pen';
+      const threshold = isTouch ? TOUCH_DRAG_THRESHOLD : DRAG_THRESHOLD;
       if (!d.dragging) {
-        if (Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
+        if (Math.hypot(dx, dy) < threshold) return;
         d.dragging = true;
         setDragging(true);
         setOnce(true);
@@ -1306,6 +1330,10 @@ export function makePetUI(rt: {
         clearTimeout(d.lpTimer);
         d.lpTimer = null;
       }
+      // 长按菜单路径的松手：菜单保持打开（原行为），既不抛掷也不播点击动画
+      // （pressScoreFiredRef 已标记），这里只需复位按压状态。
+      const wasMenued = d.menued;
+      d.menued = false;
       const wasDragging = d.dragging;
       d.active = false;
       d.dragging = false;
@@ -1355,8 +1383,10 @@ export function makePetUI(rt: {
       // 提示复位：点击/拖拽期间收起的悬浮提示，指针仍在命中区内就恢复——指针捕获期间
       // pointerleave 不触发，不复位就得把鼠标移出去再移回来才重现（与桌面 onPointerUp 同一处理）。
       // 先按松手位置摆好再显示，否则会重现上一次的位置。
+      // 长按菜单路径的松手不复位（触屏本就不显示悬停提示）。
       const hitRect = e.currentTarget.getBoundingClientRect();
       if (
+        !wasMenued &&
         e.clientX >= hitRect.left &&
         e.clientX <= hitRect.right &&
         e.clientY >= hitRect.top &&
@@ -1471,7 +1501,9 @@ export function makePetUI(rt: {
       e.preventDefault();
       e.stopPropagation(); // 不触碰 DSH 页面任何菜单/右键处理
       const d = dragRef.current;
-      if (d.active || d.dragging || justDraggedRef.current) return;
+      // 手机版适配：长按菜单路径（menued）由定时器主动派发，必须放行；
+      // 其余按下/拖拽进行中的 contextmenu（如鼠标按住右键拖动）仍按原逻辑拦截。
+      if ((d.active && !d.menued) || d.dragging || justDraggedRef.current) return;
       stopThrow(); // 菜单弹出前停住飞行中的宠物
       stopMove(); // 菜单悬停期间宠物不漫游
       if (menuRef.current) menuRef.current.close();
