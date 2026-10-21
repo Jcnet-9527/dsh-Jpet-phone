@@ -7,6 +7,7 @@ import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.RectF
@@ -18,10 +19,9 @@ import android.view.animation.LinearInterpolator
 import kotlin.math.hypot
 
 /**
- * One pet's transparent surface. The window is the union of every clip's alpha
- * box, so this view keeps a fixed size and each frame is drawn at the offset its
- * crop has inside that union: no window resizing while animating, and the body
- * anchor stays where the engine put it.
+ * One pet's transparent surface. The window tracks the clip that is playing -
+ * see [WindowGeometry] - so this view is exactly as big as the pixels it draws
+ * plus the Q 弹 pulse's slack, and a tap only counts where the frame is opaque.
  */
 @SuppressLint("ViewConstructor") // Constructed by the service, never inflated from XML.
 class PetView(
@@ -45,6 +45,10 @@ class PetView(
     var renderScale = 1.0
     var lastGesture = "none"
         private set
+
+    /** The crop the service must size the window for: the one being drawn now. */
+    val displayedCrop: SourceBox get() = display.frame?.crop ?: union
+
     private var union = SourceBox(0.0, 0.0, 640.0, 360.0)
     private val display = DisplayState<Bitmap>()
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
@@ -60,6 +64,8 @@ class PetView(
     private var moved = false
     private var menuOpened = false
     private var activePointer = -1
+    /** False until a touch really landed on the character, not on empty pixels. */
+    private var consuming = false
     private var releaseVelocityX = 0f
     private var releaseVelocityY = 0f
     private var lastMoveTime = 0L
@@ -94,10 +100,14 @@ class PetView(
     /**
      * Shows a decoded frame. A null frame means the decoder is still behind: the
      * previous frame *and its crop* stay on screen together, so a clip switch can
-     * never paint the old image with the new geometry.
+     * never paint the old image with the new geometry - nor resize the window
+     * for a frame it is not drawing yet.
      */
     fun present(frame: FrameLoader.DecodedFrame?, crop: SourceBox, mirrored: Boolean) {
-        if (display.present(frame?.bitmap, frame?.revision ?: -1L, crop, mirrored)) invalidate()
+        if (display.present(frame?.bitmap, frame?.revision ?: -1L, crop, mirrored)) {
+            union = crop
+            invalidate()
+        }
     }
 
     /** Starts the desktop's 220 ms Q 弹 pulse: wider and shorter, bottom anchored. */
@@ -134,7 +144,7 @@ class PetView(
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         val current = display.frame ?: return
-        val offset = WindowGeometry.contentOffset(current.crop, union, renderScale)
+        val offset = WindowGeometry.contentOffset(current.crop, renderScale)
         val width = (current.crop.width * renderScale).toFloat()
         val height = (current.crop.height * renderScale).toFloat()
         if (squashProgress >= 0.0) {
@@ -172,6 +182,9 @@ class PetView(
     override fun onTouchEvent(event: MotionEvent): Boolean {
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
+                // Transparent pixels are not the pet: let the app below have them.
+                if (!hitsPet(event.x, event.y)) return false
+                consuming = true
                 activePointer = event.getPointerId(0)
                 tracker?.recycle()
                 tracker = VelocityTracker.obtain()
@@ -187,6 +200,7 @@ class PetView(
                 listener.onChanged(petId)
             }
             MotionEvent.ACTION_MOVE -> {
+                if (!consuming) return false
                 if (activePointer < 0 || menuOpened) return true
                 trackScreenMovement(event)
                 tracker?.computeCurrentVelocity(1000)
@@ -205,6 +219,7 @@ class PetView(
                 }
             }
             MotionEvent.ACTION_UP -> {
+                if (!consuming) return false
                 if (activePointer < 0) return true
                 removeCallbacks(longPress)
                 if (!menuOpened) {
@@ -224,6 +239,7 @@ class PetView(
                 listener.onChanged(petId)
             }
             MotionEvent.ACTION_CANCEL, MotionEvent.ACTION_POINTER_DOWN -> {
+                if (!consuming) return false
                 lastGesture = "cancel action=${event.actionMasked}"
                 engine.cancelDrag()
                 finishGesture()
@@ -232,6 +248,26 @@ class PetView(
             }
         }
         return true
+    }
+
+    /**
+     * True when the finger landed on an opaque pixel of the frame being drawn.
+     * The window hugs the clip's alpha box, so most taps inside it are still
+     * empty space; counting those made the pet react to taps nowhere near it and
+     * swallowed touches meant for the app underneath.
+     */
+    private fun hitsPet(x: Float, y: Float): Boolean {
+        val current = display.frame ?: return false
+        val bitmap = current.bitmap
+        val crop = current.crop
+        val offset = WindowGeometry.contentOffset(crop, renderScale)
+        val width = (crop.width * renderScale).toFloat()
+        val height = (crop.height * renderScale).toFloat()
+        val point = TapTarget.sourcePoint(x, y, offset, width, height, current.mirrored)
+            ?: return false
+        val pixelX = (crop.left + point.first * crop.width).toInt().coerceIn(0, bitmap.width - 1)
+        val pixelY = (crop.top + point.second * crop.height).toInt().coerceIn(0, bitmap.height - 1)
+        return Color.alpha(bitmap.getPixel(pixelX, pixelY)) >= TapTarget.MIN_ALPHA
     }
 
     private fun trackScreenMovement(event: MotionEvent) {
@@ -246,6 +282,7 @@ class PetView(
         removeCallbacks(longPress)
         tracker?.recycle(); tracker = null
         activePointer = -1
+        consuming = false
     }
 
     override fun onDetachedFromWindow() {

@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import java.io.BufferedInputStream
 import java.io.File
 import java.util.concurrent.Executors
@@ -52,6 +53,12 @@ class FrameLoader(
         /** How many recently returned frames per pet stay off limits for reuse. */
         private const val KEEP_RECENT = 2
         private const val IDLE_WAIT_MS = 200L
+
+        /** How long a frame nobody can supply is left alone before a retry. */
+        private const val MISSING_RETRY_MS = 1_000L
+
+        /** The waiting list is small; clearing it guards against a huge catalog. */
+        private const val MISSING_LIMIT = 512
     }
 
     class DecodedFrame(val bitmap: Bitmap, val revision: Long)
@@ -77,6 +84,8 @@ class FrameLoader(
     private val inFlight = HashSet<String>()
     private val pool = ArrayDeque<Bitmap>()
     private val warmQueue = ArrayDeque<FrameRequest>()
+    /** Frames with no source yet - an animation still downloading. key -> retry at. */
+    private val missing = HashMap<String, Long>()
     private val executor = Executors.newFixedThreadPool(threads) { runnable ->
         Thread(runnable, "pet-frame-decoder")
     }
@@ -177,7 +186,7 @@ class FrameLoader(
     private fun nextRequest(): FrameRequest? = lock.withLock {
         if (closed) return null
         val next = LookaheadPlanner.pending(wanted.values.toList(), lookahead) { key ->
-            frames.containsKey(key) || key in inFlight
+            frames.containsKey(key) || key in inFlight || withheldLocked(key)
         }.firstOrNull() ?: takeWarmLocked()
         if (next != null) inFlight += next.key
         next
@@ -186,15 +195,24 @@ class FrameLoader(
     private fun takeWarmLocked(): FrameRequest? {
         while (warmQueue.isNotEmpty()) {
             val candidate = warmQueue.removeFirst()
-            if (!frames.containsKey(candidate.key) && candidate.key !in inFlight) return candidate
+            if (!frames.containsKey(candidate.key) && candidate.key !in inFlight &&
+                !withheldLocked(candidate.key)) return candidate
         }
         return null
     }
 
+    /** True while a frame is known to be missing, so it is not asked for again
+     *  every single turn of the decode loop. */
+    private fun withheldLocked(key: String): Boolean {
+        val until = missing[key] ?: return false
+        return SystemClock.elapsedRealtime() < until
+    }
+
     private fun hasWorkLocked(): Boolean =
-        warmQueue.any { !frames.containsKey(it.key) && it.key !in inFlight } ||
+        warmQueue.any { !frames.containsKey(it.key) && it.key !in inFlight &&
+            !withheldLocked(it.key) } ||
             LookaheadPlanner.pending(wanted.values.toList(), lookahead) { key ->
-                frames.containsKey(key) || key in inFlight
+                frames.containsKey(key) || key in inFlight || withheldLocked(key)
             }.isNotEmpty()
 
     /** Returns false when the loader is closed. */
@@ -206,6 +224,14 @@ class FrameLoader(
     }
 
     private fun decode(request: FrameRequest) {
+        // A frame nobody can supply is not a broken install: the animation is
+        // still downloading. Leave it alone for a moment instead of counting it
+        // as a decode failure, which used to kill the overlay on first run
+        // when half the core clips lived outside the APK.
+        if (!hasSource(request)) {
+            withholdMissing(request)
+            return
+        }
         val decodedFrame = try {
             decodeFrame(request)
         } catch (e: Exception) {
@@ -229,6 +255,19 @@ class FrameLoader(
             workReady.signalAll()
         }
         if (failures >= 3) handler.post { if (!isClosed()) failed(error) }
+    }
+
+    /** True when somebody can hand over this frame: the pack files or the APK. */
+    private fun hasSource(request: FrameRequest): Boolean =
+        request.clip.bundled || resolver?.invoke(request.clip, request.index) != null
+
+    private fun withholdMissing(request: FrameRequest) {
+        lock.withLock {
+            inFlight -= request.key
+            if (missing.size > MISSING_LIMIT) missing.clear()
+            missing[request.key] = SystemClock.elapsedRealtime() + MISSING_RETRY_MS
+            workReady.signalAll()
+        }
     }
 
     private fun decodeFrame(request: FrameRequest): Decoded? {

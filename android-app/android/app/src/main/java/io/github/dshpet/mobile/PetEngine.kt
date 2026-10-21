@@ -191,6 +191,16 @@ class PetEngine(clips: List<ClipSpec>, private val random: Random = Random.Defau
     }
 
     fun click() { vx = 0.0; vy = 0.0; pendingMove = null; enter(PetMode.CLICK, pick("click")) }
+
+    /**
+     * The opening animation. The constructor takes the first idle clip blindly,
+     * which only happens to be right while that clip ships inside the APK;
+     * once availability is known this re-picks one the device can really play.
+     */
+    fun bootstrap() {
+        elapsed = 0.0
+        enter(PetMode.IDLE, pick("idle"))
+    }
     fun beginDrag() { vx = 0.0; vy = 0.0; pendingMove = null; enter(PetMode.DRAG, pick("drag")) }
     fun cancelDrag() { if (mode == PetMode.DRAG) idle() }
     fun dragTo(bodyX: Double, bodyY: Double) {

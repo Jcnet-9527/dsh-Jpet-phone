@@ -31,6 +31,8 @@ data class PetOptions(
     val packAuto: Boolean = true,
     /** Extra remote root; blank means "use the ones baked into the manifest". */
     val packBaseUrl: String = "",
+    /** 0..1: how much of the body may hang off the left, right and bottom edges. */
+    val edgeAllowance: Float = DEFAULT_EDGE_ALLOWANCE,
 ) {
     companion object {
         const val DEFAULT_MIN_SECONDS = 20f
@@ -54,6 +56,11 @@ data class PetOptions(
 
         /** The desktop's `collision_restitution` default. */
         const val DEFAULT_RESTITUTION = Collision.RESTITUTION.toFloat()
+
+        /** Half a body off an edge by default; 0 keeps the pet fully on screen. */
+        const val DEFAULT_EDGE_ALLOWANCE = .5f
+        const val MIN_EDGE_ALLOWANCE = 0f
+        const val MAX_EDGE_ALLOWANCE = .9f
     }
 
     /** A configured interval can never invert: min ≤ max, both inside range. */
@@ -70,6 +77,8 @@ data class PetOptions(
             collisionRestitution = finite(collisionRestitution, DEFAULT_RESTITUTION)
                 .coerceIn(0f, 1f),
             chatMemory = chatMemory.coerceIn(MIN_CHAT_MEMORY, MAX_CHAT_MEMORY),
+            edgeAllowance = finite(edgeAllowance, DEFAULT_EDGE_ALLOWANCE)
+                .coerceIn(MIN_EDGE_ALLOWANCE, MAX_EDGE_ALLOWANCE),
         )
     }
 
@@ -129,12 +138,13 @@ class PetPreferences(context: Context) {
         private const val KEY_POSITION_Y = "y"
         private const val KEY_PACK_AUTO = "packAuto"
         private const val KEY_PACK_BASE_URL = "packBaseUrl"
+        private const val KEY_EDGE_ALLOWANCE = "edgeAllowance"
 
         val WATCHED_KEYS = setOf(KEY_SIZE, KEY_WANDER, KEY_SPEECH, KEY_PHRASES, KEY_SPEECH_MIN,
             KEY_SPEECH_MAX, KEY_SPEECH_SECONDS, KEY_CLICK_SOUND, KEY_CLICK_VOLUME, KEY_CLICK_URI,
             KEY_COMPANIONS, KEY_COLLISION, KEY_COLLISION_RESTITUTION, KEY_CHAT, KEY_CHAT_BASE_URL,
             KEY_CHAT_API_KEY, KEY_CHAT_MODEL, KEY_CHAT_SYSTEM, KEY_CHAT_MEMORY, KEY_CHAT_BALANCE,
-            KEY_PACK_AUTO, KEY_PACK_BASE_URL)
+            KEY_PACK_AUTO, KEY_PACK_BASE_URL, KEY_EDGE_ALLOWANCE)
     }
 
     private val prefs = context.getSharedPreferences("pet", Context.MODE_PRIVATE)
@@ -166,6 +176,7 @@ class PetPreferences(context: Context) {
         chatBalance = prefs.getBoolean(KEY_CHAT_BALANCE, true),
         packAuto = prefs.getBoolean(KEY_PACK_AUTO, true),
         packBaseUrl = prefs.getString(KEY_PACK_BASE_URL, null)?.trim() ?: "",
+        edgeAllowance = prefs.getFloat(KEY_EDGE_ALLOWANCE, PetOptions.DEFAULT_EDGE_ALLOWANCE),
     ).normalized()
 
     fun save(options: PetOptions) {
@@ -193,6 +204,7 @@ class PetPreferences(context: Context) {
             .putBoolean(KEY_CHAT_BALANCE, normalized.chatBalance)
             .putBoolean(KEY_PACK_AUTO, normalized.packAuto)
             .putString(KEY_PACK_BASE_URL, normalized.packBaseUrl.trim())
+            .putFloat(KEY_EDGE_ALLOWANCE, normalized.edgeAllowance)
             .apply()
     }
 

@@ -46,6 +46,15 @@ class PetOptionsTest {
     }
 
     @Test
+    fun thePetCanOnlyHangOffByTheConfiguredShare() {
+        assertEquals(PetOptions.DEFAULT_EDGE_ALLOWANCE, PetOptions().edgeAllowance, .001f)
+        assertEquals(.9f, PetOptions(edgeAllowance = 4f).normalized().edgeAllowance, .001f)
+        assertEquals(0f, PetOptions(edgeAllowance = -1f).normalized().edgeAllowance, .001f)
+        assertEquals(PetOptions.DEFAULT_EDGE_ALLOWANCE,
+            PetOptions(edgeAllowance = Float.NaN).normalized().edgeAllowance, .001f)
+    }
+
+    @Test
     fun nonFiniteValuesFallBackToTheDefaults() {
         val fixed = PetOptions(size = Float.NaN, speechMinSeconds = Float.POSITIVE_INFINITY,
             speechSeconds = Float.NaN, clickSoundVolume = Float.NaN).normalized()

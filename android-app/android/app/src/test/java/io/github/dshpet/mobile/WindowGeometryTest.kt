@@ -32,28 +32,39 @@ class WindowGeometryTest {
         }
     }
 
+    /**
+     * The window is resized to the clip that is playing, so each crop gets its
+     * own placement - and still lands exactly where the per-clip window of the
+     * 0.1.0 client put it, within the pixel that independent rounding costs.
+     */
     @Test
     fun everyClipKeepsThePositionAndSizeThePerClipWindowHad() {
         val bodyX = 300.0
         val bodyY = 400.0
         val safeLeft = 0
         val safeTop = 100
-        val placement = WindowGeometry.placement(bodyX, bodyY, body, union, scale, safeLeft, safeTop)
-        assertEquals((safeTop + (bodyY + union.top - body.top) * scale).toInt(), placement.y)
         for (crop in listOf(idle, wideClick, tallClick, move)) {
-            val offset = WindowGeometry.contentOffset(crop, union, scale)
+            val placement = WindowGeometry.placement(bodyX, bodyY, body, crop, scale, safeLeft, safeTop)
+            val offset = WindowGeometry.contentOffset(crop, scale)
             val legacyLeft = (safeLeft + (bodyX + crop.left - body.left) * scale).toInt()
             val legacyTop = (safeTop + (bodyY + crop.top - body.top) * scale).toInt()
-            assertTrue("clip ${crop.left} moved horizontally",
-                abs((placement.x + offset.x) - legacyLeft) <= 1.5)
             assertTrue("clip ${crop.top} moved vertically",
                 abs((placement.y + offset.y) - legacyTop) <= 1.5)
+            assertTrue("clip ${crop.left} moved horizontally",
+                abs((placement.x + offset.x) - legacyLeft) <= 1.5)
         }
     }
 
     @Test
+    fun theWindowIsNoWiderThanTheClipItShows() {
+        val width = WindowGeometry.placement(0.0, 0.0, body, idle, scale, 0, 0).width
+        val wide = WindowGeometry.placement(0.0, 0.0, body, union, scale, 0, 0).width
+        assertTrue("idle=$width union=$wide", width < wide)
+    }
+
+    @Test
     fun theWidestPulseFitsWithoutChangingTheBodyAnchor() {
-        val offset = WindowGeometry.contentOffset(union, union, scale)
+        val offset = WindowGeometry.contentOffset(union, scale)
         val placement = WindowGeometry.placement(300.0, 400.0, body, union, scale, 0, 0)
         val pulse = Squash.geometry(offset.x, offset.y,
             (union.width * scale).toFloat(), (union.height * scale).toFloat(), .5)
