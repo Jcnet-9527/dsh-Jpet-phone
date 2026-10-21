@@ -1422,9 +1422,22 @@ export function makePetUI(rt: {
 
     // ---- 右键菜单（统一自绘组件：树 + 渲染 + 样式与桌面共用 src/shared/menu.ts） ----
     // 注意：菜单是独立浮层，只在宠物命中区拦截右键（preventDefault + stopPropagation），
-    // 绝不进入/改动 DSH 页面自己的菜单；浏览器端只有「碎碎念 / 回到初始位置 + 动作」——
-    // 无「打开网站 / 查看余额」（打开网站=就在网页里；查看余额已由对话框 /balance 命令实现）。
+    // 绝不进入/改动 DSH 页面自己的菜单/右键处理。
+    // 手机版适配：补回「查看余额」菜单项（原版在浏览器端省略、改走对话 /balance 命令；
+    // 手机上输命令不如点菜单顺手）。仍无「打开网站」（就在网页里，无意义）。
     const handleMenuAction = (leaf: MenuLeaf) => {
+      if (leaf.action === 'show-balance') {
+        // 手动查看余额：POST 动作端点让 host 立即查询并写入 S（manual 标记，
+        // 余额不可用时前端必弹文字说明气泡）；数据随下一拍 /state 到达。
+        console.info('[dsh-pet] 菜单触发查看余额 pet=' + cfg.id);
+        postAction('/dsh-pet-7340/balance')
+          .then((ok: boolean) => {
+            if (!ok) console.warn('[dsh-pet] 查看余额触发失败 pet=' + cfg.id);
+            statePoller.now();
+          })
+          .catch((e: unknown) => console.warn('[dsh-pet] 查看余额触发异常', e));
+        return;
+      }
       if (leaf.action === 'whisper') {
         // 手动碎碎念：POST 动作端点让 host 立即新生成一句（写进 S）。
         // 动作**不回文本**——收到 ok 后叫醒一拍 /state，文本随下一拍到达并弹气泡（0 延迟）。
@@ -1494,6 +1507,7 @@ export function makePetUI(rt: {
       const tree: MenuNode[] = [
         { label: '碎碎念', action: 'whisper' },
         { label: '对话', action: 'chat' },
+        { label: '查看余额', action: 'show-balance' },
         { label: '回到初始位置', action: 'home' },
         ...buildMenuTree(petAnims),
       ];
