@@ -81,16 +81,28 @@ class WindowGeometryTest {
         assertTrue(placement.width >= 1 && placement.height >= 1)
     }
 
+    /**
+     * One stage for the effects too. The window must not change size when a
+     * fireworks animation follows an idle one, and every crop - wide or not -
+     * has to fit inside that one window.
+     */
     @Test
-    fun effectsClipsGetTheirOwnStageNotEveryoneElses() {
+    fun theOneStageCoversTheWidestEffectAndKeepsTheWindowStill() {
         fun clip(id: String, fx: Boolean, crop: SourceBox) =
             ClipSpec(id, "idle", 24.0, 24, crop = crop, fx = fx)
         val plain = clip("plain", false, SourceBox(150.0, 20.0, 500.0, 340.0))
         val effect = clip("effect", true, SourceBox(6.0, 0.0, 634.0, 360.0))
         val catalog = AssetCatalog(640, 360, body, WindowGeometry.union(listOf(plain, effect)),
             listOf(plain, effect), emptyList())
-        assertTrue("stage ${catalog.stageBox} must not cover the effect",
-            catalog.stageBox.right < effect.crop.right)
-        assertEquals(catalog.unionCrop, catalog.effectBox)
+        assertEquals(SourceBox(6.0, 0.0, 634.0, 360.0), catalog.stageBox)
+        val placement = WindowGeometry.placement(300.0, 400.0, body, catalog.stageBox, scale, 0, 0)
+        assertEquals(placement,
+            WindowGeometry.placement(300.0, 400.0, body, catalog.stageBox, scale, 0, 0))
+        for (crop in listOf(plain.crop, effect.crop)) {
+            val offset = WindowGeometry.contentOffset(crop, catalog.stageBox, scale)
+            assertTrue("crop ${crop.left} starts outside the window", offset.x >= -0.5f)
+            assertTrue("crop ${crop.right} runs past the window",
+                offset.x + (crop.width * scale).toFloat() <= placement.width + 0.5f)
+        }
     }
 }

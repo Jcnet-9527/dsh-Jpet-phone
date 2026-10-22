@@ -53,13 +53,13 @@ data class AssetCatalog(
     val packBaseUrls: List<String> = emptyList(),
 ) {
     /**
-     * The compact stage: the union of every clip the pet plays on its own.
-     * Roughly 173dp x 149dp at the default size, against 261dp for the full one.
+     * The one stage every clip is drawn on: the union of every crop, effects
+     * included. It is deliberately the wider box - roughly 213dp x 122dp at the
+     * default size - because the alternative was a second, untouchable window
+     * for the extra-wide animations, and Android draws pass-through overlays
+     * with a capped opacity. One window, one alpha, no overlap.
      */
-    val stageBox: SourceBox = WindowGeometry.union(clips.filter { !it.fx }.ifEmpty { clips })
-
-    /** The effects animations crop beyond that, so they get this wider stage. */
-    val effectBox: SourceBox get() = unionCrop
+    val stageBox: SourceBox = WindowGeometry.union(clips)
 
     fun clipsIn(group: String): List<ClipSpec> = clips.filter { it.group == group }
 

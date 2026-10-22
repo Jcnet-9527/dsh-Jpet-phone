@@ -184,7 +184,7 @@ private fun ChatScreen(preferences: PetPreferences, petId: Int, onClose: () -> U
                                 }
                                 main.post {
                                     busy = false
-                                    reply.onSuccess { lines.add(ChatLine("assistant", it)) }
+                                    reply.onSuccess { lines.add(ChatLine("assistant", it.text)) }
                                         .onFailure { error = it.message ?: "" }
                                 }
                             }

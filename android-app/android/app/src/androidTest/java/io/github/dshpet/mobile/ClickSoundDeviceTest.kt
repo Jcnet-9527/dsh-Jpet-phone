@@ -99,7 +99,8 @@ private class AudioHost(override val context: Context) : ModuleHost {
     override fun now() = clock
     override fun scaleRatio(pet: PetHandle) = 1.0
     override fun effectivePhrases() = emptyList<String>()
-    override fun showPhrase(pet: PetHandle, text: String, durationMs: Long) {}
+    override fun showPhrase(pet: PetHandle, text: String, durationMs: Long, spoken: Boolean) {}
+    override fun speak(text: String) {}
     override fun clearPhrase(pet: PetHandle) {}
     override fun squash(pet: PetHandle) {}
     override fun companionCount() = 0

@@ -55,6 +55,18 @@ data class PetOptions(
         const val DEFAULT_CHAT_BASE_URL = "https://api.deepseek.com"
         const val DEFAULT_CHAT_MODEL = "deepseek-chat"
         const val DEFAULT_CHAT_SYSTEM = "你是「深深」，一个住在用户手机屏幕上的 Q 版蓝发小女仆桌宠。" +
+            "你说话简短、口语化，可以撒娇、吐槽、关心用户，但每次都要把话说完整，不要说到一半就停。" +
+            "你没有联网能力，也没有任何工具，查不了天气、新闻、股价这类实时信息：" +
+            "遇到这类问题就直接说明你看不到实时信息，再凭常识给一个能用的建议，" +
+            "绝不要说“我去查一下”“稍等我看看”这种话。" +
+            "不要用 Markdown、列表或长段落，不要自称 AI 或语言模型。"
+
+        /**
+         * The persona shipped before 0.6.2. It is still on disk for anyone who
+         * ever opened the chat settings, so [PetPreferences] recognises it and
+         * keeps using the current one instead.
+         */
+        const val LEGACY_CHAT_SYSTEM = "你是「深深」，一个住在用户手机屏幕上的 Q 版蓝发小女仆桌宠。" +
             "你说话简短可爱，每次只说一两句话，可以撒娇、吐槽、关心用户。" +
             "不要用 Markdown、列表或长段落，不要自称 AI 或语言模型。"
         /** Chat rounds kept in the prompt; the desktop plugin keeps the last 5 too. */
@@ -201,7 +213,11 @@ class PetPreferences(context: Context) {
         chatModel = prefs.getString(KEY_CHAT_MODEL, null)
             ?.takeIf { it.isNotBlank() } ?: PetOptions.DEFAULT_CHAT_MODEL,
         chatSystem = prefs.getString(KEY_CHAT_SYSTEM, null)
-            ?.takeIf { it.isNotBlank() } ?: PetOptions.DEFAULT_CHAT_SYSTEM,
+            // A stored copy of the *old* default is not a custom persona: it is
+            // what the settings screen saved on first open, and keeping it would
+            // hide every future improvement to the prompt.
+            ?.takeIf { it.isNotBlank() && it != PetOptions.LEGACY_CHAT_SYSTEM }
+            ?: PetOptions.DEFAULT_CHAT_SYSTEM,
         chatMemory = prefs.getInt(KEY_CHAT_MEMORY, PetOptions.DEFAULT_CHAT_MEMORY),
         chatBalance = prefs.getBoolean(KEY_CHAT_BALANCE, true),
         packAuto = prefs.getBoolean(KEY_PACK_AUTO, true),

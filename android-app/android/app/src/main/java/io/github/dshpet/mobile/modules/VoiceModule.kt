@@ -21,6 +21,7 @@ import io.github.dshpet.mobile.SpeechPlayer
 import io.github.dshpet.mobile.R
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -48,11 +49,11 @@ class VoiceModule : HostBoundModule() {
 
     private var models: VoiceStore? = null
     private var modelUrls = ""
-    private var recognizer: VoiceRecognizer? = null
-    private var player: SpeechPlayer? = null
-    private var speakerTimbre = ""
-    private var recording = false
-    private var recordThread: Thread? = null
+    @Volatile private var recognizer: VoiceRecognizer? = null
+    @Volatile private var player: SpeechPlayer? = null
+    @Volatile private var speakerTimbre = ""
+    @Volatile private var recording = false
+    @Volatile private var recordThread: Thread? = null
     private var sessionPet = 0
     private var buttonTries = 0
 
@@ -63,17 +64,46 @@ class VoiceModule : HostBoundModule() {
         maybeShowButton()
     }
 
+    /**
+     * Stops the feature without touching a native engine.
+     *
+     * This runs on the main thread, and at this very moment the recorder thread
+     * may be inside `accept()` and the player thread inside `synthesize()`.
+     * Releasing either model here was a use-after-free - the app died the
+     * instant voice mode was switched off mid-sentence, and only survived when
+     * the pet happened to be paused. So: drop the flags and the bridges now,
+     * then hand the teardown to a worker that waits for both threads first.
+     */
     override fun onDisable() {
-        alive.set(false)
+        if (!alive.compareAndSet(true, false)) return
         VoiceBridge.speak = null
         VoiceBridge.hide?.invoke()
-        stopRecording()
-        runCatching { worker.shutdownNow() }
-        recognizer?.close()
-        recognizer = null
-        player?.close()
+        recording = false
+        Thread(::teardown, "dsh-pet-voice-stop").apply { isDaemon = true }.start()
+    }
+
+    /** Runs on the shutdown worker: nothing here may overlap a native call. */
+    private fun teardown() {
+        // Let queued work drain, so nothing new is built behind our back.
+        runCatching { worker.shutdown() }
+        runCatching { worker.awaitTermination(CLOSE_WAIT_MS, TimeUnit.MILLISECONDS) }
+        // The recorder feeds the recogniser; close it only once it has stopped.
+        val feeder = recordThread
+        recordThread = null
+        runCatching { feeder?.join(CLOSE_WAIT_MS) }
+        val closingPlayer = player
+        val closingRecognizer = recognizer
         player = null
+        recognizer = null
         speakerTimbre = ""
+        runCatching { closingRecognizer?.close() }
+        runCatching { closingPlayer?.close() }
+    }
+
+    /** Queues [block] unless the module is gone; a shut-down worker must not throw. */
+    private fun onWorker(block: () -> Unit) {
+        if (!alive.get()) return
+        runCatching { worker.execute(block) }
     }
 
     override fun menuItems(pet: PetHandle): List<ModuleMenu> {
@@ -88,11 +118,13 @@ class VoiceModule : HostBoundModule() {
     override fun onOptionsChanged() {
         val options = host.options
         if (options.packBaseUrl.trim() != modelUrls) openModels()
-        if (options.voiceTimbre != speakerTimbre) {
-            // The next line opens the model for the new timbre.
-            player?.close()
+        if (options.voiceTimbre != speakerTimbre && player != null) {
+            // Releasing a TTS model on the main thread is the same use-after-free
+            // that made switching voice mode off crash: hand it to the worker.
+            val stale = player
             player = null
             speakerTimbre = ""
+            onWorker { runCatching { stale?.close() } }
         }
         if (!alive.get()) return
         ensureVoiceModels()
@@ -113,8 +145,9 @@ class VoiceModule : HostBoundModule() {
     /** Speaks one bubble line; called from the service, on the main thread. */
     private fun speakLine(text: String) {
         if (!alive.get() || !host.options.voiceSpeak || text.isBlank()) return
-        worker.execute {
-            val speak = ensureSpeaker() ?: return@execute
+        onWorker {
+            if (!alive.get()) return@onWorker
+            val speak = ensureSpeaker() ?: return@onWorker
             if (alive.get()) speak.speak(text, host.options.voiceSpeed)
         }
     }
@@ -222,12 +255,16 @@ class VoiceModule : HostBoundModule() {
         val context = runCatching { host.context }.getOrNull() ?: return
         if (!hasMicPermission(context)) return
         recording = true
-        // A new line of speech replaces whatever the pet is still saying.
-        player?.stop()
-        worker.execute {
+        onWorker {
+            // A new line of speech replaces whatever the pet is still saying.
+            player?.stop()
             val engine = ensureRecognizer() ?: run {
                 recording = false
-                return@execute
+                return@onWorker
+            }
+            if (!alive.get()) {
+                recording = false
+                return@onWorker
             }
             engine.start()
             val record = try {
@@ -236,14 +273,14 @@ class VoiceModule : HostBoundModule() {
                     VoiceEngine.SAMPLE_RATE * 2) // one second of buffer
             } catch (e: SecurityException) {
                 recording = false
-                return@execute
+                return@onWorker
             } catch (e: IllegalArgumentException) {
                 recording = false
-                return@execute
+                return@onWorker
             }
             if (record.state != AudioRecord.STATE_INITIALIZED) {
                 recording = false
-                return@execute
+                return@onWorker
             }
             record.startRecording()
             val samples = ShortArray(VoiceEngine.SAMPLE_RATE / 10) // 100 ms
@@ -258,8 +295,8 @@ class VoiceModule : HostBoundModule() {
                         main.post { bubble(partial, LONG_BUBBLE) }
                     }
                 }
-                record.stop()
-                record.release()
+                runCatching { record.stop() }
+                runCatching { record.release() }
             }.apply {
                 isDaemon = true
                 start()
@@ -267,21 +304,30 @@ class VoiceModule : HostBoundModule() {
         }
     }
 
+    /**
+     * The tail of an utterance: wait for the last 100 ms of audio, decode, and
+     * hand the transcript to the chat. All of that used to run on the main
+     * thread - a join plus a native decode in a touch handler - and moved here
+     * with the crash fix.
+     */
     private fun endUtterance() {
         if (!recording) return
         recording = false
-        recordThread?.let { runCatching { it.join(1500) } }
+        val feeder = recordThread
         recordThread = null
-        val engine = recognizer ?: return
-        val text = runCatching { engine.finish() }.getOrDefault("")
-        if (text.isBlank()) {
-            bubble(host.context.getString(R.string.voice_heard_nothing), 4000)
-            return
+        onWorker {
+            runCatching { feeder?.join(FINISH_WAIT_MS) }
+            if (!alive.get()) return@onWorker
+            val engine = recognizer ?: return@onWorker
+            val text = runCatching { engine.finish() }.getOrDefault("")
+            if (text.isBlank()) {
+                main.post { bubble(host.context.getString(R.string.voice_heard_nothing), 4000) }
+                return@onWorker
+            }
+            // The transcript goes to the chat module; its reply comes back as the
+            // pet's bubble and voice mode reads it out like any other line.
+            main.post { ChatBridge.module?.send(text, sessionPet) { } }
         }
-        // The transcript goes to the chat module; its reply comes back as the
-        // pet's bubble and voice mode reads it out like any other line.
-        val chat = ChatBridge.module ?: return
-        chat.send(text, sessionPet) { }
     }
 
     private fun ensureRecognizer(): VoiceRecognizer? {
@@ -299,6 +345,7 @@ class VoiceModule : HostBoundModule() {
         val manager = models ?: return null
         val spec = ttsSpec()
         if (!manager.isReady(spec)) return null
+        // Runs on the worker only: the old player may still be synthesising.
         player?.close()
         return runCatching {
             SpeechPlayer(VoiceEngine.speaker(manager.modelDir(spec), timbre))
@@ -306,12 +353,6 @@ class VoiceModule : HostBoundModule() {
             player = it
             speakerTimbre = timbre
         }
-    }
-
-    private fun stopRecording() {
-        recording = false
-        recordThread?.let { runCatching { it.join(1500) } }
-        recordThread = null
     }
 
     private fun bubble(text: String, durationMs: Long) {
@@ -332,6 +373,12 @@ class VoiceModule : HostBoundModule() {
 
     private companion object {
         const val LONG_BUBBLE = 30_000L
+
+        /** How long teardown waits for the worker and the recorder to go quiet. */
+        const val CLOSE_WAIT_MS = 3_000L
+
+        /** How long the end of an utterance waits for the last chunk of audio. */
+        const val FINISH_WAIT_MS = 1_500L
     }
 }
 

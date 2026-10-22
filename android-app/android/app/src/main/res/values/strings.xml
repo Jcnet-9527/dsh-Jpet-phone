@@ -88,6 +88,7 @@
     <string name="chat_open">打开对话</string>
     <string name="chat_save">保存</string>
     <string name="chat_empty">先说点什么吧</string>
+    <string name="chat_truncated">（这条回答太长，接口把它截断了，可以让我再简单说一遍）</string>
     <string name="menu_actions">动作</string>
     <string name="menu_back">‹ 返回</string>
     <string name="pack_fetch_mark">待下载</string>

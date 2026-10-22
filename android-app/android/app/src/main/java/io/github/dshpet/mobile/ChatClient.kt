@@ -11,6 +11,13 @@ import java.nio.charset.StandardCharsets
 data class ChatTurn(val role: String, val content: String)
 
 /**
+ * A finished answer. [truncated] is true when the provider stopped because it
+ * ran into [ChatClient.MAX_TOKENS] - the only way to know an answer is missing
+ * its ending instead of guessing from the text.
+ */
+data class ChatReply(val text: String, val truncated: Boolean = false)
+
+/**
  * The only network code in the app. It speaks the OpenAI-compatible chat
  * completion protocol, which DeepSeek, Moonshot, SiliconFlow, OpenRouter and
  * most local proxies all implement, plus DeepSeek's own balance endpoint.
@@ -21,6 +28,13 @@ data class ChatTurn(val role: String, val content: String)
 object ChatClient {
     private const val CONNECT_TIMEOUT_MS = 15_000
     private const val READ_TIMEOUT_MS = 60_000
+
+    /**
+     * Room for a few paragraphs. Without it the provider's own default applies,
+     * which is how a long answer could arrive already cut - and nothing on this
+     * side could tell.
+     */
+    const val MAX_TOKENS = 1200
 
     /** Carries a message that is safe to show on screen. */
     class ChatException(message: String) : Exception(message)
@@ -70,7 +84,7 @@ object ChatClient {
      * sent verbatim, so callers decide how much memory to keep.
      */
     fun complete(endpoint: String, apiKey: String, model: String, system: String,
-                 history: List<ChatTurn>, user: String): String {
+                 history: List<ChatTurn>, user: String): ChatReply {
         if (endpoint.isBlank()) throw ChatException("还没有填接口地址")
         if (apiKey.isBlank()) throw ChatException("还没有填 API Key")
         val messages = JSONArray()
@@ -78,7 +92,7 @@ object ChatClient {
         history.forEach { messages.put(JSONObject().put("role", it.role).put("content", it.content)) }
         messages.put(JSONObject().put("role", "user").put("content", user))
         val payload = JSONObject().put("model", model).put("messages", messages)
-            .put("stream", false).put("temperature", 1.0)
+            .put("stream", false).put("temperature", 1.0).put("max_tokens", MAX_TOKENS)
         // DeepSeek serves /chat/completions; OpenAI and most proxies serve /v1/... .
         // Try the bare path first and fall back on 404 so either spelling works.
         val body = try {
@@ -90,9 +104,10 @@ object ChatClient {
         val parsed = runCatching { JSONObject(body) }.getOrNull()
             ?: throw ChatException("接口返回的内容无法解析")
         val choices = parsed.optJSONArray("choices")
-        val content = choices?.optJSONObject(0)?.optJSONObject("message")?.optString("content")
+        val first = choices?.optJSONObject(0)
+        val content = first?.optJSONObject("message")?.optString("content")
         if (content.isNullOrBlank()) throw ChatException("接口没有返回内容")
-        return content.trim()
+        return ChatReply(content.trim(), first.optString("finish_reason") == "length")
     }
 
     /** Whether this endpoint looks like DeepSeek's, which owns /user/balance. */

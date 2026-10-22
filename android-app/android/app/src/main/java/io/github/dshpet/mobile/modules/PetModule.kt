@@ -40,6 +40,16 @@ interface ModuleHost {
      */
     fun showPhrase(pet: PetHandle, text: String, durationMs: Long, spoken: Boolean = true)
 
+    /**
+     * Reads [text] out loud without showing it.
+     *
+     * [showPhrase] already speaks what it shows, so most modules never need
+     * this. It exists for an answer whose *display* is spread over several
+     * bubbles: the voice reads the whole answer once, while the bubbles arrive
+     * one sentence at a time.
+     */
+    fun speak(text: String)
+
     fun clearPhrase(pet: PetHandle)
 
     /** The desktop's Q 弹 feedback, used by collision hits. */

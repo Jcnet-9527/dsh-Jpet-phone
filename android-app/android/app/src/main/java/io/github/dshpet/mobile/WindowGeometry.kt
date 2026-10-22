@@ -22,10 +22,11 @@ data class ContentOffset(val x: Float, val y: Float)
  * hop. With a constant stage the numbers never change, so the window and its
  * contents can never disagree, whatever is playing.
  *
- * The stage still has to be big enough for what it shows: the stage box covers
- * every clip in the random pools, and the few extra-wide "effects" animations
- * get their own larger window - see [AssetCatalog.effectBox] - instead of
- * stretching the stage for everyone.
+ * The stage has to be big enough for everything it shows, so it is the union of
+ * every crop in the catalog - the extra-wide "effects" animations included.
+ * They used to get a second window of their own; a pass-through overlay window
+ * is drawn with a capped opacity, though, so the effects came out washed out
+ * and overlapped the frozen frame underneath. One stage, one window, one alpha.
  */
 object WindowGeometry {
     /**

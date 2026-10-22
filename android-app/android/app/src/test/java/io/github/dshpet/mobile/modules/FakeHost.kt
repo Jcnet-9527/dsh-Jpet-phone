@@ -40,6 +40,10 @@ internal class FakeHost(override var options: PetOptions) : ModuleHost {
         if (spoken) spokenLines += text
     }
 
+    override fun speak(text: String) {
+        spokenLines += text
+    }
+
     override fun clearPhrase(pet: PetHandle) {
         cleared += pet.id
     }

@@ -88,6 +88,7 @@
     <string name="chat_open">Open chat</string>
     <string name="chat_save">Save</string>
     <string name="chat_empty">Type something first</string>
+    <string name="chat_truncated">(This answer hit the length limit, ask me to say it shorter)</string>
     <string name="menu_actions">Actions</string>
     <string name="menu_back">&lt; Back</string>
     <string name="pack_fetch_mark">not downloaded</string>

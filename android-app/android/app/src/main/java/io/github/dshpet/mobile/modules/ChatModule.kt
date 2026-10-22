@@ -5,10 +5,13 @@ import android.os.Handler
 import android.os.Looper
 import io.github.dshpet.mobile.ChatActivity
 import io.github.dshpet.mobile.ChatClient
+import io.github.dshpet.mobile.ChatReply
 import io.github.dshpet.mobile.ChatTurn
 import io.github.dshpet.mobile.ModuleIds
 import io.github.dshpet.mobile.PetHandle
 import io.github.dshpet.mobile.PetOptions
+import io.github.dshpet.mobile.R
+import io.github.dshpet.mobile.SpeechLines
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
@@ -31,6 +34,9 @@ class ChatModule : HostBoundModule() {
     }
     private val main: Handler by lazy { Handler(Looper.getMainLooper()) }
     private val alive = java.util.concurrent.atomic.AtomicBoolean(true)
+
+    /** Bumped on every answer, so a new reply stops the previous walk-through. */
+    private var bubbleSeq = 0
 
     override fun onEnable() {
         ChatBridge.module = this
@@ -102,20 +108,16 @@ class ChatModule : HostBoundModule() {
                 ChatClient.complete(options.chatBaseUrl, options.chatApiKey, options.chatModel,
                     options.chatSystem, past, text)
             }
-            val spoken = reply.getOrDefault("")
-            if (spoken.isNotBlank()) synchronized(history) {
-                history.add(ChatTurn("assistant", spoken))
-                trim(history, options)
+            reply.getOrNull()?.let { answer ->
+                synchronized(history) {
+                    history.add(ChatTurn("assistant", answer.text))
+                    trim(history, options)
+                }
             }
             main.post {
                 if (!alive.get()) return@post
-                if (spoken.isNotBlank()) {
-                    // The bubble is the single speech exit: voice mode picks it
-                    // up inside the service's showPhrase, so a typed question and
-                    // a spoken one behave exactly the same.
-                    speak(spoken, petId)
-                }
-                onDone(reply)
+                reply.getOrNull()?.let { announce(petId, it) }
+                onDone(reply.map { it.text })
             }
         }
     }
@@ -125,7 +127,7 @@ class ChatModule : HostBoundModule() {
         val options = host.options
         if (options.chatApiKey.isBlank()) {
             val message = missingText(options)
-            speak(message, petId)
+            announce(petId, ChatReply(message))
             onDone(Result.failure(ChatClient.ChatException(message)))
             return
         }
@@ -134,7 +136,7 @@ class ChatModule : HostBoundModule() {
             main.post {
                 if (!alive.get()) return@post
                 // A failure is spoken too: a silent menu entry looks broken.
-                speak(result.fold({ it }, { it.message ?: "查询失败" }), petId)
+                announce(petId, ChatReply(result.fold({ it }, { it.message ?: "查询失败" })))
                 onDone(result)
             }
         }
@@ -147,20 +149,51 @@ class ChatModule : HostBoundModule() {
             else io.github.dshpet.mobile.R.string.chat_need_endpoint)
     }
 
-    /** Bubbles are small; a long answer is trimmed rather than overflowing. */
-    private fun speak(text: String, petId: Int) {
+    /**
+     * Says [reply] the way the desktop does: the whole answer is read out once,
+     * then the bubble walks through it a sentence or two at a time.
+     *
+     * A 90-character cut used to be the whole display, so everything past it was
+     * simply never shown - the pet said it would look something up and then went
+     * quiet. The chat screen always had the full text; now the bubble does too,
+     * without covering the pet for a minute at a time.
+     */
+    private fun announce(petId: Int, reply: ChatReply) {
         val pet = host.pets.firstOrNull { it.id == petId } ?: host.pets.firstOrNull() ?: return
-        val shown = if (text.length <= BUBBLE_LIMIT) text else text.take(BUBBLE_LIMIT - 1) + "…"
-        host.showPhrase(pet, shown, host.options.speechDurationMs() * 3)
+        val pieces = SpeechLines.split(reply.text).toMutableList()
+        if (reply.truncated) pieces += contextText(R.string.chat_truncated)
+        if (pieces.isEmpty()) return
+        // Voice mode reads the complete answer; the bubbles are only its display.
+        if (reply.text.isNotBlank()) host.speak(reply.text)
+        showPieces(pet, pieces)
     }
+
+    private fun showPieces(pet: PetHandle, pieces: List<String>) {
+        // A new answer replaces the one still being walked through.
+        val seq = ++bubbleSeq
+        fun step(index: Int) {
+            if (!alive.get() || seq != bubbleSeq) return
+            val piece = pieces[index]
+            val dwell = dwellMs(piece)
+            host.showPhrase(pet, piece, dwell, spoken = false)
+            if (index + 1 < pieces.size) main.postDelayed({ step(index + 1) }, dwell)
+        }
+        step(0)
+    }
+
+    /** Long enough to read [piece], or to hear it when voice mode is on. */
+    private fun dwellMs(piece: String): Long {
+        val perChar = if (host.options.voiceSpeak) 190f else 110f
+        val speed = host.options.voiceSpeed.coerceIn(0.5f, 2f)
+        return (900L + (piece.length * perChar / speed).toLong()).coerceIn(2_000L, 11_000L)
+    }
+
+    private fun contextText(id: Int): String =
+        runCatching { host.context.getString(id) }.getOrDefault("…")
 
     private fun trim(list: ArrayList<ChatTurn>, options: PetOptions) {
         val keep = options.chatMemory.coerceAtLeast(0) * 2
         if (list.size > keep) list.subList(0, list.size - keep).clear()
-    }
-
-    private companion object {
-        const val BUBBLE_LIMIT = 90
     }
 }
 
