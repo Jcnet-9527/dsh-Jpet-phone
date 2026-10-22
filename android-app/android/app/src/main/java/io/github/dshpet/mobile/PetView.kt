@@ -105,10 +105,29 @@ class PetView(
      * previous frame stays on screen, or nothing at all while an effects
      * animation is being drawn by its own window. The window geometry is never
      * involved here, so a clip switch can only ever change the picture.
+     *
+     * Returns true when this call actually put a new picture on screen.
      */
-    fun present(frame: FrameLoader.DecodedFrame?, crop: SourceBox, mirrored: Boolean) {
-        if (display.present(frame?.bitmap, frame?.revision ?: -1L, crop, mirrored)) invalidate()
+    fun present(frame: FrameLoader.DecodedFrame?, crop: SourceBox, mirrored: Boolean): Boolean =
+        display.present(frame?.bitmap, frame?.revision ?: -1L, crop, mirrored).also {
+            if (it) invalidate()
+        }
+
+    /**
+     * Hides the picture without giving up the window or its hit area.
+     *
+     * While an effects animation plays in its own window this view must stop
+     * painting, or the last normal frame stays frozen underneath and the two
+     * animations overlap. Alpha is a render property only: taps, drags and the
+     * long-press menu keep working on the pixels that are still in [display].
+     */
+    fun setContentVisible(visible: Boolean) {
+        val target = if (visible) 1f else 0f
+        if (alpha != target) alpha = target
     }
+
+    /** True once this view has any decoded frame to show (or to hit-test). */
+    val showsAnything: Boolean get() = display.frame != null
 
     /** Starts the desktop's 220 ms Q 弹 pulse: wider and shorter, bottom anchored. */
     fun squash() {

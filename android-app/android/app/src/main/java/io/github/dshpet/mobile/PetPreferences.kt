@@ -33,10 +33,12 @@ data class PetOptions(
     val packBaseUrl: String = "",
     /** 0..1: how much of the body may hang off the left, right and bottom edges. */
     val edgeAllowance: Float = DEFAULT_EDGE_ALLOWANCE,
-    /** The voice conversation menu entry; needs the chat module configured. */
+    /** The always-available microphone button (voice input). */
     val voiceChat: Boolean = true,
-    /** Speak chat replies aloud through the on-device TTS. */
+    /** Voice mode: every line that lands in the pet's bubble is spoken. */
     val voiceSpeak: Boolean = true,
+    /** TTS timbre, one of [TIMBRES]. */
+    val voiceTimbre: String = TIMBRE_BAKER,
     /** TTS speed, 0.5..2.0. */
     val voiceSpeed: Float = DEFAULT_VOICE_SPEED,
 ) {
@@ -71,6 +73,13 @@ data class PetOptions(
         const val DEFAULT_VOICE_SPEED = 1f
         const val MIN_VOICE_SPEED = .5f
         const val MAX_VOICE_SPEED = 2f
+
+        /** The matcha baker (sweet female, 22.05 kHz) shipped first. */
+        const val TIMBRE_BAKER = "baker"
+        /** Piper zh_CN voices, both 22.05 kHz and small enough to fetch quickly. */
+        const val TIMBRE_XIAOYA = "xiaoya"
+        const val TIMBRE_CHAOWEN = "chaowen"
+        val TIMBRES = listOf(TIMBRE_BAKER, TIMBRE_XIAOYA, TIMBRE_CHAOWEN)
     }
 
     /** A configured interval can never invert: min ≤ max, both inside range. */
@@ -89,6 +98,7 @@ data class PetOptions(
             chatMemory = chatMemory.coerceIn(MIN_CHAT_MEMORY, MAX_CHAT_MEMORY),
             edgeAllowance = finite(edgeAllowance, DEFAULT_EDGE_ALLOWANCE)
                 .coerceIn(MIN_EDGE_ALLOWANCE, MAX_EDGE_ALLOWANCE),
+            voiceTimbre = voiceTimbre.takeIf { it in TIMBRES } ?: TIMBRE_BAKER,
             voiceSpeed = finite(voiceSpeed, DEFAULT_VOICE_SPEED)
                 .coerceIn(MIN_VOICE_SPEED, MAX_VOICE_SPEED),
         )
@@ -112,7 +122,9 @@ data class PetOptions(
         ModuleIds.COMPANION -> companions
         ModuleIds.COLLISION -> collision
         ModuleIds.CHAT -> chat
-        ModuleIds.VOICE -> voiceChat && chat
+        // Either half of the voice feature keeps the module alive: voice mode
+        // (speaking every bubble) must not die just because the microphone is off.
+        ModuleIds.VOICE -> chat && (voiceChat || voiceSpeak)
         else -> false
     }
 
@@ -154,6 +166,7 @@ class PetPreferences(context: Context) {
         private const val KEY_EDGE_ALLOWANCE = "edgeAllowance"
         private const val KEY_VOICE_CHAT = "voiceChat"
         private const val KEY_VOICE_SPEAK = "voiceSpeak"
+        private const val KEY_VOICE_TIMBRE = "voiceTimbre"
         private const val KEY_VOICE_SPEED = "voiceSpeed"
 
         val WATCHED_KEYS = setOf(KEY_SIZE, KEY_WANDER, KEY_SPEECH, KEY_PHRASES, KEY_SPEECH_MIN,
@@ -161,7 +174,7 @@ class PetPreferences(context: Context) {
             KEY_COMPANIONS, KEY_COLLISION, KEY_COLLISION_RESTITUTION, KEY_CHAT, KEY_CHAT_BASE_URL,
             KEY_CHAT_API_KEY, KEY_CHAT_MODEL, KEY_CHAT_SYSTEM, KEY_CHAT_MEMORY, KEY_CHAT_BALANCE,
             KEY_PACK_AUTO, KEY_PACK_BASE_URL, KEY_EDGE_ALLOWANCE,
-            KEY_VOICE_CHAT, KEY_VOICE_SPEAK, KEY_VOICE_SPEED)
+            KEY_VOICE_CHAT, KEY_VOICE_SPEAK, KEY_VOICE_TIMBRE, KEY_VOICE_SPEED)
     }
 
     private val prefs = context.getSharedPreferences("pet", Context.MODE_PRIVATE)
@@ -196,6 +209,8 @@ class PetPreferences(context: Context) {
         edgeAllowance = prefs.getFloat(KEY_EDGE_ALLOWANCE, PetOptions.DEFAULT_EDGE_ALLOWANCE),
         voiceChat = prefs.getBoolean(KEY_VOICE_CHAT, true),
         voiceSpeak = prefs.getBoolean(KEY_VOICE_SPEAK, true),
+        voiceTimbre = prefs.getString(KEY_VOICE_TIMBRE, PetOptions.TIMBRE_BAKER)
+            ?: PetOptions.TIMBRE_BAKER,
         voiceSpeed = prefs.getFloat(KEY_VOICE_SPEED, PetOptions.DEFAULT_VOICE_SPEED),
     ).normalized()
 
@@ -227,6 +242,7 @@ class PetPreferences(context: Context) {
             .putFloat(KEY_EDGE_ALLOWANCE, normalized.edgeAllowance)
             .putBoolean(KEY_VOICE_CHAT, normalized.voiceChat)
             .putBoolean(KEY_VOICE_SPEAK, normalized.voiceSpeak)
+            .putString(KEY_VOICE_TIMBRE, normalized.voiceTimbre)
             .putFloat(KEY_VOICE_SPEED, normalized.voiceSpeed)
             .apply()
     }

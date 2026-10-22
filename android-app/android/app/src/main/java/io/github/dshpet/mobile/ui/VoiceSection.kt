@@ -2,6 +2,9 @@ package io.github.dshpet.mobile.ui
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.media.AudioFormat
+import android.media.AudioManager
+import android.media.AudioTrack
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -9,11 +12,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -26,16 +31,19 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import io.github.dshpet.mobile.PetOptions
 import io.github.dshpet.mobile.R
+import io.github.dshpet.mobile.VoiceEngine
 import io.github.dshpet.mobile.VoiceModels
 import io.github.dshpet.mobile.VoiceStatus
 import io.github.dshpet.mobile.VoiceStore
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import java.util.Locale
 
 /**
- * The voice conversation settings: the enable switch, the reply speech toggle,
- * the speed slider, and the on-device model store (download, status, delete).
- * Nothing here records or synthesises audio; it only manages the files the
- * voice module reads.
+ * Voice mode and voice input: two independent switches, the speaking voice and
+ * the speed, then the on-device models (recognizer + one speaker per timbre).
+ * Nothing here records or synthesises live audio except the preview button.
  */
 @Composable
 fun VoiceSection(
@@ -49,6 +57,8 @@ fun VoiceSection(
     val progress by VoiceStatus.progress.collectAsState()
     val revision by VoiceStatus.revision.collectAsState()
     var confirmClear by remember { mutableStateOf(false) }
+    var audition by remember { mutableStateOf(0) }
+    var previewing by remember { mutableStateOf(false) }
 
     val store = remember(revision, options.packBaseUrl) {
         val custom = options.packBaseUrl.trim()
@@ -56,16 +66,26 @@ fun VoiceSection(
             (if (custom.isEmpty()) emptyList() else listOf(custom)) + baseUrls)
     }
     val asrReady = remember(revision) { store.isReady(VoiceModels.ASR) }
-    val ttsReady = remember(revision) { store.isReady(VoiceModels.TTS) }
-    val readyCount = listOf(asrReady, ttsReady).count { it }
+    val spec = VoiceModels.ttsSpec(options.voiceTimbre)
+    val timbreReady = remember(revision, options.voiceTimbre) { store.isReady(spec) }
+    val readyCount = listOf(asrReady, timbreReady).count { it }
     val stored = remember(revision) { store.storedBytes() }
 
-    SettingSwitch(R.string.voice, options.voiceChat) { onChanged(options.copy(voiceChat = it)) }
-    if (!options.voiceChat) return
-    Text(stringResource(R.string.voice_hint), style = MaterialTheme.typography.bodySmall,
+    // Voice mode: everything the pet says in a bubble is read out.
+    SettingSwitch(R.string.voice_speak_switch, options.voiceSpeak) {
+        onChanged(options.copy(voiceSpeak = it))
+    }
+    Text(stringResource(R.string.voice_speak_hint), style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant)
 
-    if (!micGranted) {
+    // Voice input: the hold-to-talk button that lives beside the pet.
+    SettingSwitch(R.string.voice_chat_switch, options.voiceChat) {
+        onChanged(options.copy(voiceChat = it))
+    }
+    Text(stringResource(R.string.voice_chat_hint), style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+    if (options.voiceChat && !micGranted) {
         Text(stringResource(R.string.voice_permission_hint),
             color = MaterialTheme.colorScheme.error,
             style = MaterialTheme.typography.bodySmall)
@@ -75,10 +95,39 @@ fun VoiceSection(
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(stringResource(R.string.voice_timbre), style = MaterialTheme.typography.titleSmall)
+        Text(stringResource(R.string.voice_timbre_hint),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            PetOptions.TIMBRES.forEach { timbre ->
+                FilterChip(
+                    selected = options.voiceTimbre == timbre,
+                    onClick = { onChanged(options.copy(voiceTimbre = timbre)) },
+                    label = { Text(stringResource(timbreLabel(timbre))) })
+            }
+        }
+        if (!timbreReady) {
+            Text(stringResource(R.string.voice_timbre_missing, humanBytes(spec.bytes)),
+                style = MaterialTheme.typography.bodyMedium)
+            OutlinedButton(onClick = { store.downloadAll(listOf(spec)) },
+                enabled = progress == null) {
+                Text(stringResource(R.string.voice_timbre_download))
+            }
+        } else {
+            OutlinedButton(onClick = { if (!previewing) audition++ },
+                enabled = !previewing) {
+                Text(stringResource(
+                    if (previewing) R.string.voice_models_busy else R.string.voice_preview))
+            }
+        }
         Text(stringResource(R.string.voice_models), style = MaterialTheme.typography.titleSmall)
         Text(stringResource(R.string.voice_models_hint),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(stringResource(R.string.voice_asr_model) + " · " + stringResource(
+            if (asrReady) R.string.voice_asr_ready else R.string.voice_asr_missing),
+            style = MaterialTheme.typography.bodyMedium)
         Text(when {
             readyCount == 2 -> stringResource(R.string.voice_models_ready, humanBytes(stored))
             readyCount > 0 -> stringResource(R.string.voice_models_partial, readyCount)
@@ -94,7 +143,7 @@ fun VoiceSection(
                 style = MaterialTheme.typography.bodySmall)
         }
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-            Button(onClick = { store.downloadAll(listOf(VoiceModels.ASR, VoiceModels.TTS)) },
+            Button(onClick = { store.downloadAll(listOf(VoiceModels.ASR, spec)) },
                 enabled = progress == null && readyCount < 2, modifier = Modifier.weight(1f)) {
                 Text(stringResource(R.string.voice_models_download))
             }
@@ -119,12 +168,6 @@ fun VoiceSection(
         }
     }
 
-    SettingSwitch(R.string.voice_speak_switch, options.voiceSpeak) {
-        onChanged(options.copy(voiceSpeak = it))
-    }
-    Text(stringResource(R.string.voice_speak_hint), style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant)
-
     var speed by remember(options.voiceSpeed) { mutableStateOf(options.voiceSpeed) }
     SettingSlider(label = R.string.voice_speed,
         valueText = stringResource(R.string.voice_speed_value,
@@ -133,6 +176,49 @@ fun VoiceSection(
         range = PetOptions.MIN_VOICE_SPEED..PetOptions.MAX_VOICE_SPEED,
         changed = { speed = it },
         onFinished = { onChanged(options.copy(voiceSpeed = speed)) })
+
+    // The preview speaks one fixed line with the selected voice.
+    val sample = stringResource(R.string.voice_preview_text)
+    LaunchedEffect(audition) {
+        if (audition == 0) return@LaunchedEffect
+        previewing = true
+        try {
+            withContext(Dispatchers.IO) {
+                val speaker = runCatching {
+                    VoiceEngine.speaker(store.modelDir(spec), options.voiceTimbre)
+                }.getOrNull() ?: return@withContext
+                try {
+                    val pcm = speaker.synthesize(sample, options.voiceSpeed) ?: return@withContext
+                    playPreview(pcm, speaker.sampleRate)
+                } finally {
+                    speaker.close()
+                }
+            }
+        } finally {
+            previewing = false
+        }
+    }
+}
+
+private fun timbreLabel(timbre: String): Int = when (timbre) {
+    PetOptions.TIMBRE_XIAOYA -> R.string.voice_timbre_xiaoya
+    PetOptions.TIMBRE_CHAOWEN -> R.string.voice_timbre_chaowen
+    else -> R.string.voice_timbre_baker
+}
+
+/** Plays one preview clip, blocking until it is done, then cleans up. */
+private suspend fun playPreview(pcm: ShortArray, sampleRate: Int) {
+    val track = AudioTrack(AudioManager.STREAM_MUSIC, sampleRate,
+        AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT,
+        (pcm.size * 2).coerceAtLeast(8192), AudioTrack.MODE_STATIC)
+    try {
+        track.write(pcm, 0, pcm.size)
+        track.play()
+        delay(pcm.size * 1000L / sampleRate.coerceAtLeast(1) + 150)
+    } finally {
+        runCatching { track.stop() }
+        runCatching { track.release() }
+    }
 }
 
 private fun humanBytes(bytes: Long): String {

@@ -7,6 +7,7 @@ import com.k2fsa.sherpa.onnx.FeatureConfig
 import com.k2fsa.sherpa.onnx.OfflineTts
 import com.k2fsa.sherpa.onnx.OfflineTtsConfig
 import com.k2fsa.sherpa.onnx.OfflineTtsMatchaModelConfig
+import com.k2fsa.sherpa.onnx.OfflineTtsVitsModelConfig
 import com.k2fsa.sherpa.onnx.OfflineTtsModelConfig
 import com.k2fsa.sherpa.onnx.OnlineModelConfig
 import com.k2fsa.sherpa.onnx.OnlineRecognizer
@@ -63,10 +64,15 @@ object VoiceEngine {
         return SherpaRecognizer(OnlineRecognizer(config = config))
     }
 
-    /** Opens the matcha zh TTS from an unpacked TTS model. */
-    fun speaker(dir: File): VoiceSpeaker {
-        val config = OfflineTtsConfig(
-            model = OfflineTtsModelConfig(
+    /**
+     * Opens the TTS model of [timbre] from its unpacked directory. The default
+     * baker voice is a matcha model with a separate vocoder and a jieba dict;
+     * the alternative voices are piper VITS models that carry everything in
+     * one onnx plus a lexicon.
+     */
+    fun speaker(dir: File, timbre: String = PetOptions.TIMBRE_BAKER): VoiceSpeaker {
+        val model = if (timbre == PetOptions.TIMBRE_BAKER) {
+            OfflineTtsModelConfig(
                 matcha = OfflineTtsMatchaModelConfig(
                     acousticModel = File(dir, "model.onnx").absolutePath,
                     vocoder = File(dir, "vocoder.onnx").absolutePath,
@@ -76,7 +82,20 @@ object VoiceEngine {
                 ),
                 numThreads = 2,
                 debug = false,
-            ),
+            )
+        } else {
+            OfflineTtsModelConfig(
+                vits = OfflineTtsVitsModelConfig(
+                    model = File(dir, "model.onnx").absolutePath,
+                    lexicon = File(dir, "lexicon.txt").absolutePath,
+                    tokens = File(dir, "tokens.txt").absolutePath,
+                ),
+                numThreads = 2,
+                debug = false,
+            )
+        }
+        val config = OfflineTtsConfig(
+            model = model,
             // Numbers, dates and phone numbers read properly ("2025年" is not
             // "二零二五年" by accident); the fsts come with the model.
             ruleFsts = listOf("phone.fst", "date.fst", "number.fst")

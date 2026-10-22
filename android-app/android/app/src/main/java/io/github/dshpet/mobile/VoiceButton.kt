@@ -21,6 +21,9 @@ import kotlin.math.roundToInt
  */
 class VoiceButton(private val context: Context, private val windows: WindowManager) {
     private var button: TextView? = null
+    private var bounds: android.graphics.Rect? = null
+    private var lastX = Int.MIN_VALUE
+    private var lastY = Int.MIN_VALUE
 
     val isOpen get() = button != null
 
@@ -84,12 +87,31 @@ class VoiceButton(private val context: Context, private val windows: WindowManag
             return
         }
         button = view
+        bounds = android.graphics.Rect(safe)
+        lastX = params.x
+        lastY = params.y
         PetRuntime.bubbles.incrementAndGet()
+    }
+
+    /** Follows the pet; worth one layout call only when the spot really moved. */
+    fun reposition(x: Int, y: Int) {
+        val view = button ?: return
+        val safe = bounds ?: return
+        val params = view.layoutParams as? WindowManager.LayoutParams ?: return
+        val nx = x.coerceIn(safe.left, max(safe.left, safe.right - params.width))
+        val ny = y.coerceIn(safe.top, max(safe.top, safe.bottom - params.height))
+        if (nx == lastX && ny == lastY) return
+        params.x = nx
+        params.y = ny
+        lastX = nx
+        lastY = ny
+        runCatching { windows.updateViewLayout(view, params) }
     }
 
     fun close() {
         val view = button ?: return
         button = null
+        bounds = null
         runCatching { windows.removeViewImmediate(view) }
     }
 }

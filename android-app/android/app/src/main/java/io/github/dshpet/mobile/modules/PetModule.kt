@@ -33,7 +33,12 @@ interface ModuleHost {
     /** The user pool when it is non-empty, otherwise the built-in lines. */
     fun effectivePhrases(): List<String>
 
-    fun showPhrase(pet: PetHandle, text: String, durationMs: Long)
+    /**
+     * Puts [text] in the pet's bubble. [spoken] is false for machine chatter -
+     * live transcripts and download notices - so voice mode does not read them
+     * back to the user; everything else is spoken whenever voice mode is on.
+     */
+    fun showPhrase(pet: PetHandle, text: String, durationMs: Long, spoken: Boolean = true)
 
     fun clearPhrase(pet: PetHandle)
 

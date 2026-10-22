@@ -128,6 +128,17 @@ class VoiceModelsTest {
     }
 
     @Test
+    fun eachTimbreMapsToItsOwnModel() {
+        assertEquals(VoiceModels.TTS, VoiceModels.ttsSpec(PetOptions.TIMBRE_BAKER))
+        assertEquals(VoiceModels.XIAOYA, VoiceModels.ttsSpec(PetOptions.TIMBRE_XIAOYA))
+        assertEquals(VoiceModels.CHAOWEN, VoiceModels.ttsSpec(PetOptions.TIMBRE_CHAOWEN))
+        // Every listed file exists in the archive the packager produced.
+        assertTrue(VoiceModels.XIAOYA.files.contains("lexicon.txt"))
+        assertTrue(VoiceModels.XIAOYA.chunks.size == 2)
+        assertTrue(VoiceModels.XIAOYA.bytes > 0L)
+    }
+
+    @Test
     fun nestedFilesKeepTheirFolders() {
         // Every file the spec demands, nested dict tree included, so the
         // archive can never fall behind the spec's file list.

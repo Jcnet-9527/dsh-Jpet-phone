@@ -110,9 +110,10 @@ class ChatModule : HostBoundModule() {
             main.post {
                 if (!alive.get()) return@post
                 if (spoken.isNotBlank()) {
+                    // The bubble is the single speech exit: voice mode picks it
+                    // up inside the service's showPhrase, so a typed question and
+                    // a spoken one behave exactly the same.
                     speak(spoken, petId)
-                    // The voice module, when enabled, says the reply aloud too.
-                    if (host.options.voiceSpeak) VoiceBridge.speak?.invoke(spoken)
                 }
                 onDone(reply)
             }

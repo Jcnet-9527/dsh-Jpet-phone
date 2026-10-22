@@ -55,10 +55,27 @@ class PetOptionsTest {
     }
 
     @Test
-    fun voiceNeedsBothItsSwitchAndChat() {
+    fun voiceNeedsChatButEitherHalfOfTheFeature() {
         assertTrue(PetOptions(chat = true).enables(ModuleIds.VOICE))
         assertFalse(PetOptions(chat = false).enables(ModuleIds.VOICE))
-        assertFalse(PetOptions(chat = true, voiceChat = false).enables(ModuleIds.VOICE))
+        // Voice mode without the microphone still reads every bubble.
+        assertTrue(PetOptions(chat = true, voiceChat = false, voiceSpeak = true)
+            .enables(ModuleIds.VOICE))
+        // The microphone alone is enough to record, even with speaking off.
+        assertTrue(PetOptions(chat = true, voiceChat = true, voiceSpeak = false)
+            .enables(ModuleIds.VOICE))
+        assertFalse(PetOptions(chat = true, voiceChat = false, voiceSpeak = false)
+            .enables(ModuleIds.VOICE))
+    }
+
+    @Test
+    fun anUnknownVoiceFallsBackToTheDefaultTimbre() {
+        assertEquals(PetOptions.TIMBRE_BAKER, PetOptions().voiceTimbre)
+        assertEquals(PetOptions.TIMBRE_XIAOYA,
+            PetOptions(voiceTimbre = PetOptions.TIMBRE_XIAOYA).normalized().voiceTimbre)
+        assertEquals(PetOptions.TIMBRE_BAKER,
+            PetOptions(voiceTimbre = "nope").normalized().voiceTimbre)
+        assertTrue(PetOptions.TIMBRES.contains(PetOptions.TIMBRE_CHAOWEN))
     }
 
     @Test

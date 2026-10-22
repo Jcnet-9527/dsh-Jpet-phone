@@ -212,6 +212,35 @@ class VoiceModels(
             bytes = 145_676_731L,
         )
 
+        /**
+         * The piper voices: one int8 onnx per voice plus a lexicon, ~14 MB
+         * each. Same 22.05 kHz quality as the baker, a very different timbre.
+         */
+        val XIAOYA = VoiceModelSpec(
+            id = "tts-xiaoya",
+            files = listOf(
+                "model.onnx", "tokens.txt", "lexicon.txt",
+                "phone.fst", "date.fst", "number.fst"),
+            chunks = listOf("xiaoya.zip.001", "xiaoya.zip.002"),
+            bytes = 20_930_645L,
+        )
+
+        val CHAOWEN = VoiceModelSpec(
+            id = "tts-chaowen",
+            files = listOf(
+                "model.onnx", "tokens.txt", "lexicon.txt",
+                "phone.fst", "date.fst", "number.fst"),
+            chunks = listOf("chaowen.zip.001", "chaowen.zip.002"),
+            bytes = 20_930_646L,
+        )
+
+        /** The TTS model behind a timbre id from [PetOptions.TIMBRES]. */
+        fun ttsSpec(timbre: String): VoiceModelSpec = when (timbre) {
+            PetOptions.TIMBRE_XIAOYA -> XIAOYA
+            PetOptions.TIMBRE_CHAOWEN -> CHAOWEN
+            else -> TTS
+        }
+
         /** Chunk name -> exact size; filled by the packager, read for progress. */
         val CHUNK_BYTES: Map<String, Long> = emptyMap()
     }

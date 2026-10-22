@@ -19,6 +19,9 @@ internal class FakeHost(override var options: PetOptions) : ModuleHost {
 
     var clock = 1_000L
     val phrases = mutableListOf<String>()
+
+    /** Only the lines the settings would read out loud. */
+    val spokenLines = mutableListOf<String>()
     val cleared = mutableListOf<Int>()
     val squashed = mutableListOf<Int>()
     var spawnCalls = 0
@@ -32,8 +35,9 @@ internal class FakeHost(override var options: PetOptions) : ModuleHost {
 
     override fun effectivePhrases() = PhraseBook.resolve(options.phrases, builtinPhrases)
 
-    override fun showPhrase(pet: PetHandle, text: String, durationMs: Long) {
+    override fun showPhrase(pet: PetHandle, text: String, durationMs: Long, spoken: Boolean) {
         phrases += text
+        if (spoken) spokenLines += text
     }
 
     override fun clearPhrase(pet: PetHandle) {
