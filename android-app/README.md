@@ -39,7 +39,32 @@ APK 只有约 45 MB，因为里面只放了 7 段核心动画（待机/转向/�
 其余 99 段每段一个 zip 存放在素材仓库，第一次用到时自动下载（设置 → 动画素材
 可以一键全下、清除、换自建镜像）。下载内容与随包版本画质完全一致，**没有二次编码**。
 
-## 本版（0.6.1）相对 0.6.0 的改动
+## 本版（0.6.2）相对 0.6.1 的改动
+
+四个实机问题的修复（用户指定顺序 4A→2A→1A→3A）：
+
+- **关语音模式闪退（4A）**：`VoiceModule.onDisable` 不再在主线程释放 native 引擎——
+  改为只置 `alive=false`、断开 `VoiceBridge`、隐藏按钮，真正的关停 `teardown()` 投到
+  后台线程：先 `worker.shutdown()+awaitTermination`，再 `recordThread.join` 停录音，
+  最后才 `recognizer.close()` / `player.close()`。`SpeechPlayer.close()` 内部先
+  `thread.join`（等播放线程离开 `synthesize()`）再 `speaker.close()`；native 引擎
+  `SherpaRecognizer`/`SherpaSpeaker` 各加 `gate` 互斥门，close 后一切调用变 no-op。
+  `endUtterance` 的 `join(1500)` 也从主线程挪到 worker，消除 ANR 隐患。
+- **菜单滚动文字外溢（2A）**：圆角背景从 `ScrollView` 自己身上移到外层
+  `FrameLayout` 容器并 `clipToOutline=true`，`ScrollView` 改为透明内嵌；
+  去掉 Android 12+ 的 `FLAG_BLUR_BEHIND` 整矩形模糊（它比圆角卡片大一圈）。
+- **特效偏透明（1A）**：`AssetCatalog.stageBox` 扩到全部动作的并集，删除
+  `attachEffect`/`detachEffect`/`effectView`/`effectParams`/`setContentVisible` 整套
+  第二窗口机制，`render()` 回归单窗口单 `present`。特效原来画在 `FLAG_NOT_TOUCHABLE`
+  的第二窗口，撞上 Android 12 对穿透窗口约 80% 的不透明度上限，是偏透明的根因。
+- **AI 回复"查一下就没下文"（3A）**：新增 `SpeechLines` 分句器（按句切分、短句合并、
+  超长句在逗号处断），`ChatModule.announce` 把完整回答切成分片，气泡逐条替换显示
+  （`showPieces` + `bubbleSeq` 防新回答打断旧的），语音通过新接口 `host.speak` 整段
+  朗读，全文照常进聊天记录。`ChatClient.complete` 返回 `ChatReply(text, truncated)`，
+  加 `max_tokens=1200` 并检查 `finish_reason=="length"`；默认人设改为明确"无联网能力，
+  实时信息直说看不到，不要承诺去查"。
+
+## 0.6.1 相对 0.6.0 的改动
 
 - **语音模式语义改对**：`voiceSpeak` 从"读回复"升级为"**读所有气泡**"——服务端
   `showPhrase` 是唯一出口，任何文本进气泡（对话回复、点击闲聊、余额播报）都会朗读，
