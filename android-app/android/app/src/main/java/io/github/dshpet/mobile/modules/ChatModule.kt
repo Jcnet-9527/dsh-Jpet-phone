@@ -109,7 +109,11 @@ class ChatModule : HostBoundModule() {
             }
             main.post {
                 if (!alive.get()) return@post
-                if (spoken.isNotBlank()) speak(spoken, petId)
+                if (spoken.isNotBlank()) {
+                    speak(spoken, petId)
+                    // The voice module, when enabled, says the reply aloud too.
+                    if (host.options.voiceSpeak) VoiceBridge.speak?.invoke(spoken)
+                }
                 onDone(reply)
             }
         }

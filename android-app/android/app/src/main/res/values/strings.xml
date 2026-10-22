@@ -106,4 +106,29 @@
     <string name="packs_url_hint">留空使用内置源。自建或镜像时填根目录地址，以 / 结尾。</string>
     <string name="packs_url_save">保存下载源</string>
     <string name="packs_managed">由设置页管理</string>
+
+    <string name="voice">语音对话</string>
+    <string name="voice_talk">按住说话</string>
+    <string name="voice_talk_menu">语音对话</string>
+    <string name="voice_hint">对着深深说话：按住按钮讲话，松手后深深会像打字聊天一样回答，并用语音把回复读出来。识别和朗读都在手机本地完成，不联网、不耗 API 额度（对话本身仍走你配置的接口）。</string>
+    <string name="voice_speak_switch">用语音读出回复</string>
+    <string name="voice_speak_hint">关闭后只显示气泡文字。朗读模型约 130 MB，第一次回复前会自动下载。</string>
+    <string name="voice_speed">朗读语速</string>
+    <string name="voice_speed_value">%1$s 倍</string>
+    <string name="voice_model_missing">语音模型还没下载，到设置的「语音对话」里先下载</string>
+    <string name="voice_model_downloading">正在下载语音模型…</string>
+    <string name="voice_model_progress">语音模型下载中 %1$d%%</string>
+    <string name="voice_model_failed">语音模型下载失败，请检查网络后重试</string>
+    <string name="voice_heard_nothing">没听清，再按住说一次吧</string>
+    <string name="voice_models">语音模型</string>
+    <string name="voice_models_hint">识别模型约 60 MB、朗读模型约 130 MB，下载后存在手机里，全程离线运行。</string>
+    <string name="voice_models_ready">已下载 · 共 %1$s</string>
+    <string name="voice_models_partial">已下载 %1$d / 2 个</string>
+    <string name="voice_models_missing">尚未下载</string>
+    <string name="voice_models_download">下载语音模型</string>
+    <string name="voice_models_clear">删除语音模型</string>
+    <string name="voice_models_clear_message">删除手机上的语音识别与朗读模型。之后第一次使用时会自动重新下载。</string>
+    <string name="voice_permission_hint">使用语音对话需要「麦克风」权限，仅用于识别你说的话。</string>
+    <string name="voice_grant_mic">允许麦克风</string>
+    <string name="voice_models_busy">正在下载…</string>
 </resources>

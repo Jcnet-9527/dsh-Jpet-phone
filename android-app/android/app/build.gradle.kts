@@ -11,9 +11,14 @@ android {
         applicationId = "io.github.dshpet.mobile"
         minSdk = 26
         targetSdk = 36
-        versionCode = 7
-        versionName = "0.5.1"
+        versionCode = 8
+        versionName = "0.6.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        // The voice runtime (sherpa-onnx) ships one .so per ABI; real phones
+        // are all ARM, so the emulator ABIs stay out and the APK stays small.
+        ndk {
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+        }
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -75,6 +80,8 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.core:core-ktx:1.16.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
+    // On-device ASR + TTS runtime; the models themselves download on demand.
+    implementation(files("libs/sherpa-onnx-1.13.8.aar"))
     debugImplementation("androidx.compose.ui:ui-tooling")
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")

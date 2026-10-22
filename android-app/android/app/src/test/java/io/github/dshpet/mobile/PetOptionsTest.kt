@@ -55,6 +55,22 @@ class PetOptionsTest {
     }
 
     @Test
+    fun voiceNeedsBothItsSwitchAndChat() {
+        assertTrue(PetOptions(chat = true).enables(ModuleIds.VOICE))
+        assertFalse(PetOptions(chat = false).enables(ModuleIds.VOICE))
+        assertFalse(PetOptions(chat = true, voiceChat = false).enables(ModuleIds.VOICE))
+    }
+
+    @Test
+    fun voiceSpeedStaysInsideItsRange() {
+        assertEquals(PetOptions.DEFAULT_VOICE_SPEED, PetOptions().voiceSpeed, .001f)
+        assertEquals(2f, PetOptions(voiceSpeed = 9f).normalized().voiceSpeed, .001f)
+        assertEquals(.5f, PetOptions(voiceSpeed = 0f).normalized().voiceSpeed, .001f)
+        assertEquals(PetOptions.DEFAULT_VOICE_SPEED,
+            PetOptions(voiceSpeed = Float.NaN).normalized().voiceSpeed, .001f)
+    }
+
+    @Test
     fun nonFiniteValuesFallBackToTheDefaults() {
         val fixed = PetOptions(size = Float.NaN, speechMinSeconds = Float.POSITIVE_INFINITY,
             speechSeconds = Float.NaN, clickSoundVolume = Float.NaN).normalized()

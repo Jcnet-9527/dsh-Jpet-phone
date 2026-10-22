@@ -47,6 +47,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -69,9 +70,15 @@ import io.github.dshpet.mobile.ui.CollisionSection
 import io.github.dshpet.mobile.ui.CompanionSection
 import io.github.dshpet.mobile.ui.SectionTitle
 import io.github.dshpet.mobile.ui.SpeechSection
+import io.github.dshpet.mobile.ui.VoiceSection
 import io.github.dshpet.mobile.ui.WanderSection
 
 class MainActivity : ComponentActivity() {
+    companion object {
+        /** The voice module bounces here when the microphone is not granted. */
+        const val EXTRA_VOICE_PERMISSION = "voicePermission"
+    }
+
     private lateinit var preferences: PetPreferences
     private var overlayAllowed by mutableStateOf(false)
     private var options by mutableStateOf(PetOptions())
@@ -80,6 +87,8 @@ class MainActivity : ComponentActivity() {
     private var catalog by mutableStateOf<AssetCatalog?>(null)
     private var preview: ClickAudio? = null
     private var previewState by mutableStateOf(ClickAudio.State.IDLE)
+    private var micGranted by mutableStateOf(false)
+    private var askMicOnResume by mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -89,12 +98,20 @@ class MainActivity : ComponentActivity() {
         audioName = resolveAudioName(options.clickSoundUri)
         catalog = runCatching { AssetCatalog.load(assets) }.getOrNull()
         builtinCount = catalog?.phrases?.size ?: 0
+        askMicOnResume = intent?.getBooleanExtra(EXTRA_VOICE_PERMISSION, false) ?: false
         setContent { PetSettings() }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        if (intent.getBooleanExtra(EXTRA_VOICE_PERMISSION, false)) askMicOnResume = true
     }
 
     override fun onResume() {
         super.onResume()
         overlayAllowed = Settings.canDrawOverlays(this)
+        micGranted = ContextCompat.checkSelfPermission(this,
+            Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
         if (::preferences.isInitialized) {
             options = preferences.options()
             audioName = resolveAudioName(options.clickSoundUri)
@@ -138,6 +155,15 @@ class MainActivity : ComponentActivity() {
         var resetConfirmation by remember { mutableStateOf(false) }
         val permissionRequest = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
             PetOverlayService.command(context, PetOverlayService.START)
+        }
+        val micRequest = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+            micGranted = it
+        }
+        if (askMicOnResume) {
+            askMicOnResume = false
+            LaunchedEffect(Unit) {
+                if (!micGranted) micRequest.launch(Manifest.permission.RECORD_AUDIO)
+            }
         }
         val audioPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
             if (uri != null) {
@@ -227,6 +253,11 @@ class MainActivity : ComponentActivity() {
                     ChatSection(options, { save(it) }, onOpenChat = {
                         startActivity(Intent(this@MainActivity, ChatActivity::class.java))
                     })
+                    HorizontalDivider()
+                    SectionTitle(R.string.voice)
+                    VoiceSection(options, catalog?.packBaseUrls ?: emptyList(), micGranted,
+                        onRequestMic = { micRequest.launch(Manifest.permission.RECORD_AUDIO) },
+                        onChanged = { save(it) })
                     HorizontalDivider()
                     TextButton(onClick = { resetConfirmation = true }) {
                         Icon(Icons.Default.Refresh, null)

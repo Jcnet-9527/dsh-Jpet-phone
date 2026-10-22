@@ -106,4 +106,29 @@
     <string name="packs_url_hint">Leave empty for the built-in source. For a self-hosted mirror, enter the root URL ending with /.</string>
     <string name="packs_url_save">Save source</string>
     <string name="packs_managed">Managed on the settings screen</string>
+
+    <string name="voice">Voice talk</string>
+    <string name="voice_talk">Hold to talk</string>
+    <string name="voice_talk_menu">Voice talk</string>
+    <string name="voice_hint">Talk to the pet: hold the button and speak, release, and the reply arrives like a typed chat and is read aloud. Recognition and speech run entirely on the phone; the chat itself still uses your configured endpoint.</string>
+    <string name="voice_speak_switch">Read replies aloud</string>
+    <string name="voice_speak_hint">Turn off for text bubbles only. The speech model is about 130 MB and downloads before the first reply.</string>
+    <string name="voice_speed">Speech speed</string>
+    <string name="voice_speed_value">%1$s×</string>
+    <string name="voice_model_missing">The voice models are not downloaded yet. Download them under Voice talk in the settings.</string>
+    <string name="voice_model_downloading">Downloading voice models…</string>
+    <string name="voice_model_progress">Voice models %1$d%%</string>
+    <string name="voice_model_failed">Voice model download failed. Check the network and try again.</string>
+    <string name="voice_heard_nothing">Nothing heard. Hold and try again.</string>
+    <string name="voice_models">Voice models</string>
+    <string name="voice_models_hint">The recognizer is about 60 MB and the speaker about 130 MB. They are stored on the phone and run fully offline.</string>
+    <string name="voice_models_ready">Downloaded · %1$s in total</string>
+    <string name="voice_models_partial">%1$d of 2 downloaded</string>
+    <string name="voice_models_missing">Not downloaded yet</string>
+    <string name="voice_models_download">Download voice models</string>
+    <string name="voice_models_clear">Delete voice models</string>
+    <string name="voice_models_clear_message">Removes the speech recognizer and speaker from this phone. They are downloaded again on first use.</string>
+    <string name="voice_permission_hint">Voice talk needs the microphone permission, used only to recognize what you say.</string>
+    <string name="voice_grant_mic">Allow microphone</string>
+    <string name="voice_models_busy">Downloading…</string>
 </resources>

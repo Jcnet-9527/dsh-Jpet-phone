@@ -6,6 +6,8 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Only used when the user sends a chat message or asks for the balance. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Only while the hold-to-talk button is pressed: on-device recognition. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <application
         android:allowBackup="false"
         android:usesCleartextTraffic="true"

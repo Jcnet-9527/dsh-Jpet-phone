@@ -33,6 +33,12 @@ data class PetOptions(
     val packBaseUrl: String = "",
     /** 0..1: how much of the body may hang off the left, right and bottom edges. */
     val edgeAllowance: Float = DEFAULT_EDGE_ALLOWANCE,
+    /** The voice conversation menu entry; needs the chat module configured. */
+    val voiceChat: Boolean = true,
+    /** Speak chat replies aloud through the on-device TTS. */
+    val voiceSpeak: Boolean = true,
+    /** TTS speed, 0.5..2.0. */
+    val voiceSpeed: Float = DEFAULT_VOICE_SPEED,
 ) {
     companion object {
         const val DEFAULT_MIN_SECONDS = 20f
@@ -61,6 +67,10 @@ data class PetOptions(
         const val DEFAULT_EDGE_ALLOWANCE = .5f
         const val MIN_EDGE_ALLOWANCE = 0f
         const val MAX_EDGE_ALLOWANCE = .9f
+
+        const val DEFAULT_VOICE_SPEED = 1f
+        const val MIN_VOICE_SPEED = .5f
+        const val MAX_VOICE_SPEED = 2f
     }
 
     /** A configured interval can never invert: min ≤ max, both inside range. */
@@ -79,6 +89,8 @@ data class PetOptions(
             chatMemory = chatMemory.coerceIn(MIN_CHAT_MEMORY, MAX_CHAT_MEMORY),
             edgeAllowance = finite(edgeAllowance, DEFAULT_EDGE_ALLOWANCE)
                 .coerceIn(MIN_EDGE_ALLOWANCE, MAX_EDGE_ALLOWANCE),
+            voiceSpeed = finite(voiceSpeed, DEFAULT_VOICE_SPEED)
+                .coerceIn(MIN_VOICE_SPEED, MAX_VOICE_SPEED),
         )
     }
 
@@ -100,6 +112,7 @@ data class PetOptions(
         ModuleIds.COMPANION -> companions
         ModuleIds.COLLISION -> collision
         ModuleIds.CHAT -> chat
+        ModuleIds.VOICE -> voiceChat && chat
         else -> false
     }
 
@@ -139,12 +152,16 @@ class PetPreferences(context: Context) {
         private const val KEY_PACK_AUTO = "packAuto"
         private const val KEY_PACK_BASE_URL = "packBaseUrl"
         private const val KEY_EDGE_ALLOWANCE = "edgeAllowance"
+        private const val KEY_VOICE_CHAT = "voiceChat"
+        private const val KEY_VOICE_SPEAK = "voiceSpeak"
+        private const val KEY_VOICE_SPEED = "voiceSpeed"
 
         val WATCHED_KEYS = setOf(KEY_SIZE, KEY_WANDER, KEY_SPEECH, KEY_PHRASES, KEY_SPEECH_MIN,
             KEY_SPEECH_MAX, KEY_SPEECH_SECONDS, KEY_CLICK_SOUND, KEY_CLICK_VOLUME, KEY_CLICK_URI,
             KEY_COMPANIONS, KEY_COLLISION, KEY_COLLISION_RESTITUTION, KEY_CHAT, KEY_CHAT_BASE_URL,
             KEY_CHAT_API_KEY, KEY_CHAT_MODEL, KEY_CHAT_SYSTEM, KEY_CHAT_MEMORY, KEY_CHAT_BALANCE,
-            KEY_PACK_AUTO, KEY_PACK_BASE_URL, KEY_EDGE_ALLOWANCE)
+            KEY_PACK_AUTO, KEY_PACK_BASE_URL, KEY_EDGE_ALLOWANCE,
+            KEY_VOICE_CHAT, KEY_VOICE_SPEAK, KEY_VOICE_SPEED)
     }
 
     private val prefs = context.getSharedPreferences("pet", Context.MODE_PRIVATE)
@@ -177,6 +194,9 @@ class PetPreferences(context: Context) {
         packAuto = prefs.getBoolean(KEY_PACK_AUTO, true),
         packBaseUrl = prefs.getString(KEY_PACK_BASE_URL, null)?.trim() ?: "",
         edgeAllowance = prefs.getFloat(KEY_EDGE_ALLOWANCE, PetOptions.DEFAULT_EDGE_ALLOWANCE),
+        voiceChat = prefs.getBoolean(KEY_VOICE_CHAT, true),
+        voiceSpeak = prefs.getBoolean(KEY_VOICE_SPEAK, true),
+        voiceSpeed = prefs.getFloat(KEY_VOICE_SPEED, PetOptions.DEFAULT_VOICE_SPEED),
     ).normalized()
 
     fun save(options: PetOptions) {
@@ -205,6 +225,9 @@ class PetPreferences(context: Context) {
             .putBoolean(KEY_PACK_AUTO, normalized.packAuto)
             .putString(KEY_PACK_BASE_URL, normalized.packBaseUrl.trim())
             .putFloat(KEY_EDGE_ALLOWANCE, normalized.edgeAllowance)
+            .putBoolean(KEY_VOICE_CHAT, normalized.voiceChat)
+            .putBoolean(KEY_VOICE_SPEAK, normalized.voiceSpeak)
+            .putFloat(KEY_VOICE_SPEED, normalized.voiceSpeed)
             .apply()
     }
 
