@@ -26,6 +26,13 @@ data class ClipSpec(
     val bundled: Boolean = true,
     /** Unpacked frame bytes, used for download progress and cache reporting. */
     val bytes: Long = 0L,
+    /**
+     * True for the extra-wide animations - butterflies, balloons, fireworks.
+     * Their crops span most of the 640px canvas, and paying for them in the
+     * stage would leave every other animation inside a box three bodies wide.
+     * They are listed under 特效 and played when asked for, never at random.
+     */
+    val fx: Boolean = false,
 ) {
     val duration get() = frames / fps
 
@@ -45,6 +52,15 @@ data class AssetCatalog(
     val phrases: List<String>,
     val packBaseUrls: List<String> = emptyList(),
 ) {
+    /**
+     * The compact stage: the union of every clip the pet plays on its own.
+     * Roughly 173dp x 149dp at the default size, against 261dp for the full one.
+     */
+    val stageBox: SourceBox = WindowGeometry.union(clips.filter { !it.fx }.ifEmpty { clips })
+
+    /** The effects animations crop beyond that, so they get this wider stage. */
+    val effectBox: SourceBox get() = unionCrop
+
     fun clipsIn(group: String): List<ClipSpec> = clips.filter { it.group == group }
 
     /** Categories in the order the menu should show them, extras appended. */
@@ -59,7 +75,14 @@ data class AssetCatalog(
 
     companion object {
         /** Matches the exporter's CATEGORY_ORDER so the menu reads naturally. */
-        private val PREferred_ORDER = listOf("待机", "小动作", "点击回应", "移动", "转向", "拖拽", "余额")
+        private val PREferred_ORDER =
+            listOf("待机", "小动作", "点击回应", "移动", "转向", "拖拽", "余额", "特效")
+
+        /** Crops wider than this, in source px, are effects: ~174dp at the default size. */
+        private const val FX_MAX_WIDTH = 420.0
+
+        /** The menu group holding the effects animations. */
+        private const val FX_CATEGORY = "特效"
 
         private fun JSONArray.box() = SourceBox(getDouble(0), getDouble(1), getDouble(2), getDouble(3))
         fun load(assets: AssetManager): AssetCatalog {
@@ -74,12 +97,15 @@ data class AssetCatalog(
             val clips = (0 until entries.length()).map { index ->
                 val entry = entries.getJSONObject(index)
                 val curve = entry.optJSONArray("curve") ?: JSONArray()
+                val crop = entry.getJSONArray("crop_box").box()
+                val fx = crop.width > FX_MAX_WIDTH
                 ClipSpec(entry.getString("id"), entry.getString("group"), entry.getDouble("fps"),
                     entry.getInt("frames"), entry.getDouble("stride"),
                     (0 until curve.length()).map { curve.getDouble(it) },
-                    entry.getString("path"), entry.getJSONArray("crop_box").box(),
-                    entry.optString("name", ""), entry.optString("category", ""),
-                    entry.optBoolean("bundled", true), entry.optLong("bytes", 0L)).also {
+                    entry.getString("path"), crop,
+                    entry.optString("name", ""),
+                    if (fx) FX_CATEGORY else entry.optString("category", ""),
+                    entry.optBoolean("bundled", true), entry.optLong("bytes", 0L), fx).also {
                     require(it.frames in 1..10000 && it.fps.isFinite() && it.fps in 1.0..120.0)
                     require(it.path.matches(Regex("clips/[a-z]+_[a-f0-9]{12}")))
                     require(it.crop.width > 0 && it.crop.height > 0)

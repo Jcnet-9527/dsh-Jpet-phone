@@ -3,6 +3,7 @@ package io.github.dshpet.mobile
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /** Tap maths: transparent pixels must be identifiable from the touch point. */
@@ -37,5 +38,15 @@ class TapTargetTest {
     @Test
     fun anEmptyFrameNeverAnswers() {
         assertNull(TapTarget.sourcePoint(6f, 0f, offset, 0f, 0f, false))
+    }
+
+    @Test
+    fun aFingertipProbesTheRingAroundTheTap() {
+        val probes = TapTarget.probes(50f, 40f, 10f)
+        assertEquals(9, probes.size)
+        assertTrue(probes.contains(50f to 40f))
+        assertTrue(probes.contains(60f to 40f))
+        assertTrue(probes.contains(40f to 30f))
+        assertTrue(probes.contains(50f to 50f))
     }
 }

@@ -24,6 +24,23 @@ class PetEngineTest {
         assertEquals(PetMode.IDLE, e.mode)
     }
 
+    @Test fun effectsAnimationsNeverTurnUpOnTheirOwn() {
+        val withFx = clips + ClipSpec("butterflies", "idle", 24.0, 24, fx = true)
+        val e = PetEngine(withFx, random = kotlin.random.Random(3)).apply {
+            resize(300.0, 600.0)
+            restorePosition(.5, .5)
+        }
+        // Hundreds of random picks across every mode that chooses for itself.
+        repeat(600) {
+            e.playRandom()
+            assertNotEquals("fx clip played on its own", "butterflies", e.clip.id)
+            e.advance(.05)
+        }
+        // ...but asking for it by name still works.
+        e.play(withFx.last())
+        assertEquals("butterflies", e.clip.id)
+    }
+
     @Test fun draggingOwnsPositionAndReleaseClampsSpeed() {
         val e = engine()
         e.beginDrag()

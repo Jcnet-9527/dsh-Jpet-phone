@@ -41,7 +41,14 @@ object ThrowMath {
 /** The service owns the clock; this model has no threads, Android calls, or I/O. */
 class PetEngine(clips: List<ClipSpec>, private val random: Random = Random.Default) {
     private val groups = clips.groupBy { it.group }
-    var clip: ClipSpec = groups.getValue("idle").first()
+
+    /**
+     * What the pet picks for itself: every animation except the extra-wide
+     * effects, which the stage is too small for. They are still playable - that
+     * is what [play] is for - they just never turn up by surprise.
+     */
+    private val pools = clips.filter { !it.fx }.groupBy { it.group }
+    var clip: ClipSpec = (pools["idle"] ?: groups.getValue("idle")).first()
         private set
     var mode = PetMode.IDLE
         private set
@@ -140,7 +147,7 @@ class PetEngine(clips: List<ClipSpec>, private val random: Random = Random.Defau
      * instead, so the pet never stalls on a network request.
      */
     private fun pick(group: String): ClipSpec {
-        val pool = groups.getValue(group)
+        val pool = pools[group]?.takeIf { it.isNotEmpty() } ?: groups.getValue(group)
         val check = availability
         val ready = if (check == null) pool else pool.filter(check)
         if (ready.isNotEmpty()) return ready.random(random)
