@@ -39,7 +39,39 @@ APK 只有约 45 MB，因为里面只放了 7 段核心动画（待机/转向/�
 其余 99 段每段一个 zip 存放在素材仓库，第一次用到时自动下载（设置 → 动画素材
 可以一键全下、清除、换自建镜像）。下载内容与随包版本画质完全一致，**没有二次编码**。
 
-## 本版（0.6.2）相对 0.6.1 的改动
+## 本版（0.6.3）相对 0.6.2 的改动
+
+- **内置更新检测（1A）**：新增 `UpdateChecker`，读
+  `https://api.github.com/repos/Jcnet-9527/dsh-Jpet-phone/releases/latest`。
+  要点：GitHub 对缺 `User-Agent` 的请求回 **403**；匿名限 60 次/小时/IP，所以自动检查
+  6 小时一次（`PetPreferences.updateCheckDue`）、失败静默。版本号按数字逐段比较
+  （`isNewer`），避免 `0.10.0 < 0.9.1` 这种字符串陷阱。设置页底部「检查更新」+ 弹窗
+  「立即更新（`ACTION_VIEW` 跳 Release 页）/稍后（24h snooze）」。因为没申请
+  `REQUEST_INSTALL_PACKAGES`，更新走系统浏览器下载安装，覆盖安装保留设置与素材。
+- **删除内置台词（2A）**：`export_android_assets.py` 不再传 `DEFAULT_SELF_TALK_TEXTS`
+  （桌面版共用常量因此不受影响），manifest 的 `phrases` 为空；`SpeechModule` 的
+  随机池只在用户自己写了台词时才说话。设置页文案改为「留空时不主动说话；带台词的动作
+  （现在 %d 个）开始播放时会自己开口」，计数来自 `AssetCatalog.lineCount`。
+- **动作台词（3A）**：新增
+  `assets/characters/shenshen/videos/clip_lines.json`（10 条），导出时按
+  「精确名 → `-后缀` → 包含」三级匹配写进每个 clip 的 `line` 字段（`ClipSpec.line`）。
+  `PetEngine.clipStarts` 在 `enter()` 里自增——比比较 clip id 更准，菜单重播同一个动作
+  也算一次新的开始。服务在 `render()` 里 `sayClipLine()`：仅主宠物、受 `speech` 开关、
+  时长 `2.5s + 90ms/字`（夹 3–8s）、同句 10s 内不重复、两条台词间隔 1.5s 以上。
+  `SpeechModule` 遇到带台词的动作不再抽池，避免两个气泡抢同一块地方。
+- **默认人设（4A）**：`DEFAULT_CHAT_SYSTEM` 换成桌宠单人版小鲸鱼——保留参考卡的内核
+  （傲娇嘴硬、心软藏着、去 AI 味、「大肥鱼」雷点、自称「本鱼」），删掉本 App 不存在的
+  QQ 群聊/`send_message`/表情包/引用/拍一拍/`web_search`/记忆工具，并把句子长度从
+  1~10 字放宽到 10~40 字（每句都会被 TTS 读出来，太短听着像口吃）。
+  `LEGACY_CHAT_SYSTEM` 改成列表 `LEGACY_CHAT_SYSTEMS`，历代默认都识别为默认并自动迁移；
+  真正自定义过人设的保持不变。
+- **余额显示（5A）**：`balance_infos` 是 **数组**（`object[]`），旧代码用
+  `optJSONObject` 读，数组返回 null → 空列表 → 命中 `ifBlank`，于是每次都是
+  「余额查询成功，但接口没给出数字」。改为按数组解析（同时兼容对象形状，某些中转会改写
+  返回），格式 `余额 ¥110.00（赠金 ¥10.00 · 充值 ¥100.00）`，CNY→¥、USD→$、
+  未知币种保留代码；多币种只列总额不拆明细。
+
+## 0.6.2 相对 0.6.1 的改动
 
 四个实机问题的修复（用户指定顺序 4A→2A→1A→3A）：
 
