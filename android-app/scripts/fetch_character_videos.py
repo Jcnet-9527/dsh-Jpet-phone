@@ -15,6 +15,7 @@ import argparse
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -38,7 +39,7 @@ def wanted() -> list[str]:
 def fetch(name: str, destination: Path) -> bool:
     for base in MIRRORS:
         try:
-            request = urllib.request.Request(base + name.replace("\\", "/"),
+            request = urllib.request.Request(base + urllib.parse.quote(name.replace("\\", "/")),
                 headers={"User-Agent": "dsh-pet-mobile"})
             with urllib.request.urlopen(request, timeout=120) as response:
                 payload = response.read()

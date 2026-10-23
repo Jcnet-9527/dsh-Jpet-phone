@@ -31,6 +31,23 @@ import io.github.dshpet.mobile.R
  */
 @Composable
 fun ChatSection(options: PetOptions, onChanged: (PetOptions) -> Unit, onOpenChat: () -> Unit) {
+    SettingSwitch(R.string.dsh, options.dsh) { onChanged(options.copy(dsh = it)) }
+    if (options.dsh) {
+        Text(stringResource(R.string.dsh_hint))
+        var dshUrl by remember(options.dshBaseUrl) { mutableStateOf(options.dshBaseUrl) }
+        var dshToken by remember(options.dshToken) { mutableStateOf(options.dshToken) }
+        Field(R.string.dsh_endpoint, dshUrl, R.string.dsh_endpoint_hint,
+            KeyboardOptions(imeAction = ImeAction.Next)) {
+            dshUrl = it
+            onChanged(options.copy(dshBaseUrl = it))
+        }
+        Field(R.string.dsh_token, dshToken, R.string.dsh_token_hint,
+            KeyboardOptions(imeAction = ImeAction.Next), secret = true) {
+            dshToken = it
+            onChanged(options.copy(dshToken = it))
+        }
+        HorizontalDivider()
+    }
     SettingSwitch(R.string.chat, options.chat) { onChanged(options.copy(chat = it)) }
     if (!options.chat) return
     Text(stringResource(R.string.chat_hint))

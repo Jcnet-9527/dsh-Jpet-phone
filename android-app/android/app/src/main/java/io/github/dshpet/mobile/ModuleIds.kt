@@ -13,6 +13,7 @@ object ModuleIds {
     const val COLLISION = "collision"
     const val CHAT = "chat"
     const val VOICE = "voice"
+    const val SHAKE = "shake"
 
-    val ALL = listOf(WANDER, SPEECH, CLICK_SOUND, COMPANION, COLLISION, CHAT, VOICE)
+    val ALL = listOf(WANDER, SPEECH, CLICK_SOUND, COMPANION, COLLISION, CHAT, VOICE, SHAKE)
 }

@@ -159,7 +159,13 @@ class PetView(
         }
         sourceRect.set(current.crop.left.toInt(), current.crop.top.toInt(),
             current.crop.right.toInt(), current.crop.bottom.toInt())
+        val lean = engine.tilt
         canvas.save()
+        if (lean != 0.0) {
+            canvas.rotate((lean * 180.0 / Math.PI).toFloat(),
+                destinationRect.centerX(), destinationRect.bottom)
+            canvas.translate((lean * destinationRect.height() * 0.32).toFloat(), 0f)
+        }
         if (current.mirrored) {
             canvas.scale(-1f, 1f, destinationRect.centerX(), destinationRect.centerY())
         }

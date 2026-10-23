@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
 import android.os.SystemClock
 import android.provider.OpenableColumns
 import android.provider.Settings
@@ -69,6 +70,8 @@ import io.github.dshpet.mobile.ui.ClickSoundSection
 import io.github.dshpet.mobile.ui.CollisionSection
 import io.github.dshpet.mobile.ui.CompanionSection
 import io.github.dshpet.mobile.ui.SectionTitle
+import io.github.dshpet.mobile.ui.ShakeSection
+import io.github.dshpet.mobile.ui.TouchSection
 import io.github.dshpet.mobile.ui.SpeechSection
 import io.github.dshpet.mobile.ui.VoiceSection
 import io.github.dshpet.mobile.ui.WanderSection
@@ -83,15 +86,12 @@ class MainActivity : ComponentActivity() {
     private var overlayAllowed by mutableStateOf(false)
     private var options by mutableStateOf(PetOptions())
     private var audioName by mutableStateOf<String?>(null)
-    private var lineCount by mutableStateOf(0)
+    private var builtinCount by mutableStateOf(0)
     private var catalog by mutableStateOf<AssetCatalog?>(null)
     private var preview: ClickAudio? = null
     private var previewState by mutableStateOf(ClickAudio.State.IDLE)
     private var micGranted by mutableStateOf(false)
     private var askMicOnResume by mutableStateOf(false)
-    private var updateChecking by mutableStateOf(false)
-    private var updateMessage by mutableStateOf<Int?>(null)
-    private var pendingUpdate by mutableStateOf<UpdateInfo?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -100,14 +100,21 @@ class MainActivity : ComponentActivity() {
         options = preferences.options()
         audioName = resolveAudioName(options.clickSoundUri)
         catalog = runCatching { AssetCatalog.load(assets) }.getOrNull()
-        lineCount = catalog?.lineCount ?: 0
+        builtinCount = catalog?.phrases?.size ?: 0
         askMicOnResume = intent?.getBooleanExtra(EXTRA_VOICE_PERMISSION, false) ?: false
+        // Debug-only hook for automated checks: --ez shakeTest true
+        if (BuildConfig.DEBUG && intent?.getBooleanExtra("shakeTest", false) == true) {
+            PetOverlayService.command(this, PetOverlayService.SHAKE_TEST)
+        }
         setContent { PetSettings() }
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         if (intent.getBooleanExtra(EXTRA_VOICE_PERMISSION, false)) askMicOnResume = true
+        if (BuildConfig.DEBUG && intent.getBooleanExtra("shakeTest", false)) {
+            PetOverlayService.command(this, PetOverlayService.SHAKE_TEST)
+        }
     }
 
     override fun onResume() {
@@ -125,6 +132,24 @@ class MainActivity : ComponentActivity() {
         preview?.close()
         preview = null
         super.onStop()
+    }
+
+    /** Battery-optimisation exemption; without it vivo kills the overlay on screen off. */
+    private fun requestBackgroundPermission() {
+        val power = getSystemService(PowerManager::class.java)
+        if (power.isIgnoringBatteryOptimizations(packageName)) {
+            runCatching {
+                startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    Uri.parse("package:$packageName")))
+            }
+            return
+        }
+        runCatching {
+            startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                Uri.parse("package:$packageName")))
+        }.onFailure {
+            runCatching { startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) }
+        }
     }
 
     private fun previewSound() {
@@ -168,9 +193,6 @@ class MainActivity : ComponentActivity() {
                 if (!micGranted) micRequest.launch(Manifest.permission.RECORD_AUDIO)
             }
         }
-        // Silent and throttled: opening the settings screen is not a request to
-        // go online, and a phone without a network must not see an error.
-        LaunchedEffect(Unit) { checkUpdate(auto = true) }
         val audioPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
             if (uri != null) {
                 runCatching {
@@ -237,13 +259,19 @@ class MainActivity : ComponentActivity() {
                             Text(stringResource(R.string.stop))
                         }
                     }
+                    OutlinedButton(onClick = { requestBackgroundPermission() },
+                        modifier = Modifier.fillMaxWidth()) {
+                        Text(stringResource(R.string.allow_background))
+                    }
                     HorizontalDivider()
                     SectionTitle(R.string.appearance)
                     AppearanceSection(options) { save(it) }
                     HorizontalDivider()
                     SectionTitle(R.string.interaction)
                     WanderSection(options) { save(it) }
-                    SpeechSection(options, lineCount) { save(it) }
+                    ShakeSection(options) { save(it) }
+                    TouchSection(options) { save(it) }
+                    SpeechSection(options, builtinCount) { save(it) }
                     ClickSoundSection(options, audioName, { save(it) },
                         onPick = { audioPicker.launch(arrayOf("audio/*")) },
                         onPreview = ::previewSound,
@@ -270,21 +298,8 @@ class MainActivity : ComponentActivity() {
                         Spacer(Modifier.width(8.dp))
                         Text(stringResource(R.string.reset))
                     }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            Text(stringResource(R.string.version, BuildConfig.VERSION_NAME),
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                style = MaterialTheme.typography.bodySmall)
-                            updateMessage?.let {
-                                Text(stringResource(it), color = MaterialTheme.colorScheme.primary,
-                                    style = MaterialTheme.typography.bodySmall)
-                            }
-                        }
-                        TextButton(onClick = { checkUpdate(auto = false) }, enabled = !updateChecking) {
-                            Text(stringResource(
-                                if (updateChecking) R.string.update_checking else R.string.update_check))
-                        }
-                    }
+                    Text(stringResource(R.string.version, BuildConfig.VERSION_NAME), color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall)
                 }
                 if (resetConfirmation) AlertDialog(onDismissRequest = { resetConfirmation = false },
                     title = { Text(stringResource(R.string.reset)) },
@@ -301,70 +316,8 @@ class MainActivity : ComponentActivity() {
                     dismissButton = { TextButton(onClick = { resetConfirmation = false }) {
                         Text(stringResource(R.string.cancel))
                     } })
-                pendingUpdate?.let { info ->
-                    AlertDialog(onDismissRequest = { later(info) },
-                        title = { Text(stringResource(R.string.update_found_title, info.version)) },
-                        text = {
-                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text(stringResource(R.string.update_found_hint))
-                                notesPreview(info.notes)?.let {
-                                    Text(it, style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                }
-                            }
-                        },
-                        confirmButton = { TextButton(onClick = {
-                            openPage(info.pageUrl)
-                            later(info)
-                        }) { Text(stringResource(R.string.update_now)) } },
-                        dismissButton = { TextButton(onClick = { later(info) }) {
-                            Text(stringResource(R.string.update_later))
-                        } })
-                }
             }
         }
-    }
-
-    /**
-     * Asks GitHub for the newest release. [auto] means "nobody clicked": it
-     * respects the 6-hour gate and the「稍后」snooze and says nothing on failure.
-     */
-    private fun checkUpdate(auto: Boolean) {
-        if (updateChecking) return
-        if (auto && (!preferences.updateCheckDue() || preferences.updateSnoozed())) return
-        updateChecking = true
-        if (auto) updateMessage = null
-        Thread {
-            val result = runCatching { UpdateChecker.latest() }
-            runOnUiThread {
-                preferences.rememberUpdateCheck()
-                updateChecking = false
-                result.onSuccess { info ->
-                    if (info != null) pendingUpdate = info else updateMessage = R.string.update_latest
-                }.onFailure { updateMessage = R.string.update_failed }
-            }
-        }.apply { isDaemon = true }.start()
-    }
-
-    /** 「稍后」/ 已更新: no automatic prompt for a day, the button still works. */
-    private fun later(info: UpdateInfo) {
-        preferences.snoozeUpdate()
-        pendingUpdate = null
-    }
-
-    private fun openPage(url: String) {
-        if (url.isBlank()) return
-        runCatching { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
-    }
-
-    /** The first few lines of the release notes, short enough for a dialog. */
-    private fun notesPreview(notes: String): String? {
-        val text = notes.lineSequence()
-            .map { it.trim().trimStart('-', '*', ' ') }
-            .filter { it.isNotEmpty() }
-            .take(5)
-            .joinToString("\n")
-        return text.take(260).takeIf { it.isNotBlank() }
     }
 
     private fun statusText(runtime: RuntimeState): Int = when {

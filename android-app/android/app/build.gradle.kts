@@ -6,13 +6,14 @@ plugins {
 
 android {
     namespace = "io.github.dshpet.mobile"
-    compileSdk = 36
+    compileSdk = 34
+    buildToolsVersion = "29.0.3"
     defaultConfig {
-        applicationId = "io.github.dshpet.mobile"
+        applicationId = "io.github.dshpet.mobile.dsh"
         minSdk = 26
-        targetSdk = 36
-        versionCode = 11
-        versionName = "0.6.3"
+        targetSdk = 34
+        versionCode = 19
+        versionName = "0.6.2-dsh.19"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // The voice runtime (sherpa-onnx) ships one .so per ABI; real phones
         // are all ARM, so the emulator ABIs stay out and the APK stays small.
@@ -73,18 +74,18 @@ val packPetAssets by tasks.registering(Exec::class) {
 tasks.named("preBuild").configure { dependsOn(packPetAssets) }
 
 dependencies {
-    implementation(platform("androidx.compose:compose-bom:2025.05.01"))
-    implementation("androidx.activity:activity-compose:1.10.1")
+    implementation(platform("androidx.compose:compose-bom:2024.06.00"))
+    implementation("androidx.activity:activity-compose:1.9.0")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.compose.ui:ui-tooling-preview")
-    implementation("androidx.core:core-ktx:1.16.0")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
+    implementation("androidx.core:core-ktx:1.13.1")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     // On-device ASR + TTS runtime; the models themselves download on demand.
     implementation(files("libs/sherpa-onnx-1.13.8.aar"))
     debugImplementation("androidx.compose.ui:ui-tooling")
     testImplementation("junit:junit:4.13.2")
-    androidTestImplementation("androidx.test.ext:junit:1.2.1")
-    androidTestImplementation("androidx.test:runner:1.6.2")
-    androidTestImplementation("androidx.test:rules:1.6.1")
+    androidTestImplementation("androidx.test.ext:junit:1.1.5")
+    androidTestImplementation("androidx.test:runner:1.5.2")
+    androidTestImplementation("androidx.test:rules:1.5.0")
 }

@@ -1,5 +1,6 @@
 package io.github.dshpet.mobile.modules
 
+import io.github.dshpet.mobile.DshClient
 import io.github.dshpet.mobile.ModuleIds
 import io.github.dshpet.mobile.PetHandle
 import io.github.dshpet.mobile.PhraseBook
@@ -20,9 +21,6 @@ class SpeechModule(private val random: Random = Random.Default) : HostBoundModul
         if (pet.isCompanion || pet.engine.paused) return
         val pool = host.effectivePhrases()
         if (pool.isEmpty()) return
-        // The current animation may be saying its own line right now; two
-        // bubbles fighting for the same corner is worse than silence.
-        if (pet.engine.clip.line.isNotBlank()) return
         val now = host.now()
         val due = nextAt.getOrPut(pet.id) { now + host.options.speechDelayMs(random) }
         if (now < due) return
@@ -32,9 +30,6 @@ class SpeechModule(private val random: Random = Random.Default) : HostBoundModul
 
     override fun onEvent(event: PetEvent) {
         if (event !is PetEvent.Clicked || event.pet.isCompanion) return
-        // A tap animation that carries a line says it itself (the service shows
-        // it as the clip starts), so the pool must not talk over it.
-        if (event.pet.engine.clip.line.isNotBlank()) return
         speak(event.pet, host.effectivePhrases())
     }
 
@@ -51,8 +46,17 @@ class SpeechModule(private val random: Random = Random.Default) : HostBoundModul
     override fun diagnostics() = "spoken=$spoken"
 
     private fun speak(pet: PetHandle, pool: List<String>) {
+        val options = host.options
+        if (options.dsh) {
+            DshClient.whisperAsync(options.dshBaseUrl, options.dshToken, "main") { line ->
+                val text = line ?: PhraseBook.pick(pool, random) ?: return@whisperAsync
+                spoken++
+                host.showPhrase(pet, text, options.speechDurationMs())
+            }
+            return
+        }
         val line = PhraseBook.pick(pool, random) ?: return
         spoken++
-        host.showPhrase(pet, line, host.options.speechDurationMs())
+        host.showPhrase(pet, line, options.speechDurationMs())
     }
 }

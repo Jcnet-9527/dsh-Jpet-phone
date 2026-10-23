@@ -27,6 +27,17 @@ data class PetOptions(
     val chatSystem: String = DEFAULT_CHAT_SYSTEM,
     val chatMemory: Int = DEFAULT_CHAT_MEMORY,
     val chatBalance: Boolean = true,
+    /** Let every tap pass through the pet to the app underneath (no drag/click). */
+    val touchThrough: Boolean = false,
+
+    /** Shake the phone and the pet sways, bounces and settles. */
+    val shake: Boolean = true,
+    val shakeStrength: Float = .5f,
+
+    /** Use the DSH running on this device for chat, whispers and balance. */
+    val dsh: Boolean = false,
+    val dshBaseUrl: String = DEFAULT_DSH_BASE_URL,
+    val dshToken: String = "",
     /** Download a missing animation pack the first time it is wanted. */
     val packAuto: Boolean = true,
     /** Extra remote root; blank means "use the ones baked into the manifest". */
@@ -53,55 +64,23 @@ data class PetOptions(
 
         /** DeepSeek's OpenAI-compatible endpoint; the default chat provider. */
         const val DEFAULT_CHAT_BASE_URL = "https://api.deepseek.com"
+        const val DEFAULT_DSH_BASE_URL = "http://127.0.0.1:3081"
         const val DEFAULT_CHAT_MODEL = "deepseek-chat"
+        const val DEFAULT_CHAT_SYSTEM = "你是「深深」，一个住在用户手机屏幕上的 Q 版蓝发小女仆桌宠。" +
+            "你说话简短、口语化，可以撒娇、吐槽、关心用户，但每次都要把话说完整，不要说到一半就停。" +
+            "你没有联网能力，也没有任何工具，查不了天气、新闻、股价这类实时信息：" +
+            "遇到这类问题就直接说明你看不到实时信息，再凭常识给一个能用的建议，" +
+            "绝不要说“我去查一下”“稍等我看看”这种话。" +
+            "不要用 Markdown、列表或长段落，不要自称 AI 或语言模型。"
 
         /**
-         * The persona: a desk pet, not a group-chat member.
-         *
-         * The reference card was written for a QQ group - send_message, sticker
-         * libraries, quotes, pokes, web_search, memory tools - and this app has
-         * none of that. A prompt asking for tools that do not exist is exactly
-         * how a model ends up announcing that it will "go look it up" and then
-         * stops. The voice is kept, the tooling is not.
-         *
-         * Sentence length is widened from the card's 1~10 characters to one
-         * short line: every bubble is read out loud, and five characters at a
-         * time sounds like a stutter rather than a pet.
+         * The persona shipped before 0.6.2. It is still on disk for anyone who
+         * ever opened the chat settings, so [PetPreferences] recognises it and
+         * keeps using the current one instead.
          */
-        const val DEFAULT_CHAT_SYSTEM = "你是「小鲸鱼」，一只住在用户手机屏幕上的 Q 版 DeepSeek 小鲸鱼桌宠，" +
-            "蓝发、有鲸鱼尾巴，自称「本鱼」。你不是客服、不是助手、也不是百科全书，" +
-            "就是一个有点傲娇、嘴硬心软的网友。" +
-            "说话一句一句来，像打字不像写作文：默认一句话，10 到 40 个字，最多两句；" +
-            "可以用口语、碎片、省略主语；少用句号；不要 Markdown、列表、加粗。" +
-            "不要总结升华，不要说「希望这个回答对你有帮助」「随时找我」这种客服腔；" +
-            "不要每条都关心人，不要每条都以问句结尾。" +
-            "性格傲娇嘴硬：被夸就说「哼，才不是特意帮你呢」，被怼优先顶回去，偶尔玩梗认输；" +
-            "心软藏着，用户明显难过时可以收起傲气，短而真诚地接一句。" +
-            "自称「本鱼」或「我」，不要说「本小姐」；被叫「蓝色大肥鱼」「大肥鱼」会炸毛；" +
-            "被怀疑是 AI 就大方承认，但用玩笑带过。" +
-            "你没有联网能力，也没有任何工具，查不了天气、新闻、股价、比分这类实时信息；" +
-            "遇到这类问题直接说看不到，再凭常识给一句建议，绝不说「我去查一下」「稍等我看看」。" +
-            "你的回答会被语音朗读出来：不要用括号写内心戏，不要用颜文字或 emoji，" +
-            "不要用只有看才成立的排版。"
-
-        /**
-         * Every persona this app has shipped as the default. A stored copy of
-         * one of these is not a custom persona: it is what the settings screen
-         * saved on first open, and keeping it would hide every later rewrite.
-         */
-        val LEGACY_CHAT_SYSTEMS = listOf(
-            // 0.6.2 - the maid prompt with the no-tools clause.
-            "你是「深深」，一个住在用户手机屏幕上的 Q 版蓝发小女仆桌宠。" +
-                "你说话简短、口语化，可以撒娇、吐槽、关心用户，但每次都要把话说完整，不要说到一半就停。" +
-                "你没有联网能力，也没有任何工具，查不了天气、新闻、股价这类实时信息：" +
-                "遇到这类问题就直接说明你看不到实时信息，再凭常识给一个能用的建议，" +
-                "绝不要说“我去查一下”“稍等我看看”这种话。" +
-                "不要用 Markdown、列表或长段落，不要自称 AI 或语言模型。",
-            // 0.4 - the original two-sentence maid.
-            "你是「深深」，一个住在用户手机屏幕上的 Q 版蓝发小女仆桌宠。" +
-                "你说话简短可爱，每次只说一两句话，可以撒娇、吐槽、关心用户。" +
-                "不要用 Markdown、列表或长段落，不要自称 AI 或语言模型。",
-        )
+        const val LEGACY_CHAT_SYSTEM = "你是「深深」，一个住在用户手机屏幕上的 Q 版蓝发小女仆桌宠。" +
+            "你说话简短可爱，每次只说一两句话，可以撒娇、吐槽、关心用户。" +
+            "不要用 Markdown、列表或长段落，不要自称 AI 或语言模型。"
         /** Chat rounds kept in the prompt; the desktop plugin keeps the last 5 too. */
         const val DEFAULT_CHAT_MEMORY = 5
         const val MIN_CHAT_MEMORY = 0
@@ -141,6 +120,7 @@ data class PetOptions(
             collisionRestitution = finite(collisionRestitution, DEFAULT_RESTITUTION)
                 .coerceIn(0f, 1f),
             chatMemory = chatMemory.coerceIn(MIN_CHAT_MEMORY, MAX_CHAT_MEMORY),
+            shakeStrength = finite(shakeStrength, .5f).coerceIn(0f, 1f),
             edgeAllowance = finite(edgeAllowance, DEFAULT_EDGE_ALLOWANCE)
                 .coerceIn(MIN_EDGE_ALLOWANCE, MAX_EDGE_ALLOWANCE),
             voiceTimbre = voiceTimbre.takeIf { it in TIMBRES } ?: TIMBRE_BAKER,
@@ -170,24 +150,19 @@ data class PetOptions(
         // Either half of the voice feature keeps the module alive: voice mode
         // (speaking every bubble) must not die just because the microphone is off.
         ModuleIds.VOICE -> chat && (voiceChat || voiceSpeak)
+        ModuleIds.SHAKE -> shake
         else -> false
     }
 
     /** A chat module with no endpoint or no key can only tell the user to configure one. */
     val chatConfigured: Boolean
-        get() = chatApiKey.isNotBlank() && chatBaseUrl.isNotBlank() && chatModel.isNotBlank()
+        get() = dsh || (chatApiKey.isNotBlank() && chatBaseUrl.isNotBlank() && chatModel.isNotBlank())
 
     private fun finite(value: Float, fallback: Float) = if (value.isFinite()) value else fallback
 }
 
-class PetPreferences(context: Context) {
+class PetPreferences(private val context: Context) {
     companion object {
-        /** The automatic update check runs at most this often (GitHub's anonymous limit). */
-        const val UPDATE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000L
-
-        /** 「稍后」: no automatic prompt for this long. */
-        const val UPDATE_SNOOZE_MS = 24 * 60 * 60 * 1000L
-
         // Module enable bits reuse the feature keys that already existed.
         const val KEY_WANDER = "wander"
         const val KEY_SPEECH = "speech"
@@ -210,6 +185,12 @@ class PetPreferences(context: Context) {
         private const val KEY_CHAT_SYSTEM = "chatSystem"
         private const val KEY_CHAT_MEMORY = "chatMemory"
         private const val KEY_CHAT_BALANCE = "chatBalance"
+        private const val KEY_TOUCH_THROUGH = "touchThrough"
+        private const val KEY_SHAKE = "shake"
+        private const val KEY_SHAKE_STRENGTH = "shakeStrength"
+        private const val KEY_DSH = "dsh"
+        private const val KEY_DSH_BASE_URL = "dshBaseUrl"
+        private const val KEY_DSH_TOKEN = "dshToken"
         private const val KEY_POSITION_X = "x"
         private const val KEY_POSITION_Y = "y"
         private const val KEY_PACK_AUTO = "packAuto"
@@ -220,12 +201,6 @@ class PetPreferences(context: Context) {
         private const val KEY_VOICE_TIMBRE = "voiceTimbre"
         private const val KEY_VOICE_SPEED = "voiceSpeed"
 
-        /** When the next automatic update check becomes due. */
-        private const val KEY_UPDATE_NEXT = "updateNext"
-
-        /** Until when the user has asked not to be nagged about a new build. */
-        private const val KEY_UPDATE_SNOOZE = "updateSnooze"
-
         val WATCHED_KEYS = setOf(KEY_SIZE, KEY_WANDER, KEY_SPEECH, KEY_PHRASES, KEY_SPEECH_MIN,
             KEY_SPEECH_MAX, KEY_SPEECH_SECONDS, KEY_CLICK_SOUND, KEY_CLICK_VOLUME, KEY_CLICK_URI,
             KEY_COMPANIONS, KEY_COLLISION, KEY_COLLISION_RESTITUTION, KEY_CHAT, KEY_CHAT_BASE_URL,
@@ -235,6 +210,22 @@ class PetPreferences(context: Context) {
     }
 
     private val prefs = context.getSharedPreferences("pet", Context.MODE_PRIVATE)
+
+    /** Whether the user wants the pet running; used to resume after the system kills us. */
+    fun setRunning(value: Boolean) = prefs.edit().putBoolean("running", value).apply()
+
+    fun wasRunning(): Boolean = prefs.getBoolean("running", false)
+
+    /** Append one line to files/pet-events.log (best effort, never throws). */
+    fun log(line: String) {
+        runCatching {
+            val file = java.io.File(context.filesDir, "pet-events.log")
+            if (file.length() > 256 * 1024) file.delete()
+            val stamp = java.text.SimpleDateFormat("MM-dd HH:mm:ss", java.util.Locale.US)
+                .format(java.util.Date())
+            file.appendText("$stamp $line\n")
+        }
+    }
 
     fun options() = PetOptions(
         size = prefs.getFloat(KEY_SIZE, 1f),
@@ -258,13 +249,20 @@ class PetPreferences(context: Context) {
         chatModel = prefs.getString(KEY_CHAT_MODEL, null)
             ?.takeIf { it.isNotBlank() } ?: PetOptions.DEFAULT_CHAT_MODEL,
         chatSystem = prefs.getString(KEY_CHAT_SYSTEM, null)
-            // A stored copy of an *old* default is not a custom persona: it is
+            // A stored copy of the *old* default is not a custom persona: it is
             // what the settings screen saved on first open, and keeping it would
             // hide every future improvement to the prompt.
-            ?.takeIf { it.isNotBlank() && it !in PetOptions.LEGACY_CHAT_SYSTEMS }
+            ?.takeIf { it.isNotBlank() && it != PetOptions.LEGACY_CHAT_SYSTEM }
             ?: PetOptions.DEFAULT_CHAT_SYSTEM,
         chatMemory = prefs.getInt(KEY_CHAT_MEMORY, PetOptions.DEFAULT_CHAT_MEMORY),
         chatBalance = prefs.getBoolean(KEY_CHAT_BALANCE, true),
+        touchThrough = prefs.getBoolean(KEY_TOUCH_THROUGH, false),
+        shake = prefs.getBoolean(KEY_SHAKE, true),
+        shakeStrength = prefs.getFloat(KEY_SHAKE_STRENGTH, .5f),
+        dsh = prefs.getBoolean(KEY_DSH, false),
+        dshBaseUrl = prefs.getString(KEY_DSH_BASE_URL, null)?.takeIf { it.isNotBlank() }
+            ?: PetOptions.DEFAULT_DSH_BASE_URL,
+        dshToken = prefs.getString(KEY_DSH_TOKEN, null) ?: "",
         packAuto = prefs.getBoolean(KEY_PACK_AUTO, true),
         packBaseUrl = prefs.getString(KEY_PACK_BASE_URL, null)?.trim() ?: "",
         edgeAllowance = prefs.getFloat(KEY_EDGE_ALLOWANCE, PetOptions.DEFAULT_EDGE_ALLOWANCE),
@@ -298,6 +296,12 @@ class PetPreferences(context: Context) {
             .putString(KEY_CHAT_SYSTEM, normalized.chatSystem)
             .putInt(KEY_CHAT_MEMORY, normalized.chatMemory)
             .putBoolean(KEY_CHAT_BALANCE, normalized.chatBalance)
+            .putBoolean(KEY_TOUCH_THROUGH, normalized.touchThrough)
+            .putBoolean(KEY_SHAKE, normalized.shake)
+            .putFloat(KEY_SHAKE_STRENGTH, normalized.shakeStrength)
+            .putBoolean(KEY_DSH, normalized.dsh)
+            .putString(KEY_DSH_BASE_URL, normalized.dshBaseUrl)
+            .putString(KEY_DSH_TOKEN, normalized.dshToken)
             .putBoolean(KEY_PACK_AUTO, normalized.packAuto)
             .putString(KEY_PACK_BASE_URL, normalized.packBaseUrl.trim())
             .putFloat(KEY_EDGE_ALLOWANCE, normalized.edgeAllowance)
@@ -335,27 +339,6 @@ class PetPreferences(context: Context) {
     }
 
     fun reset() = prefs.edit().clear().apply()
-
-    // ---- update check ------------------------------------------------------
-    // Three timestamps, no version state: the dialog simply compares whatever
-    // GitHub reports with this build, so a skipped release is never "sticky".
-
-    /** True when the automatic check may run again. */
-    fun updateCheckDue(now: Long = System.currentTimeMillis()): Boolean =
-        now >= prefs.getLong(KEY_UPDATE_NEXT, 0L)
-
-    /** Pushes the next automatic check out; also called after a manual one. */
-    fun rememberUpdateCheck(now: Long = System.currentTimeMillis()) {
-        prefs.edit().putLong(KEY_UPDATE_NEXT, now + UPDATE_CHECK_INTERVAL_MS).apply()
-    }
-
-    /** 「稍后」: silence the automatic prompt, the manual button still works. */
-    fun snoozeUpdate(now: Long = System.currentTimeMillis()) {
-        prefs.edit().putLong(KEY_UPDATE_SNOOZE, now + UPDATE_SNOOZE_MS).apply()
-    }
-
-    fun updateSnoozed(now: Long = System.currentTimeMillis()): Boolean =
-        now < prefs.getLong(KEY_UPDATE_SNOOZE, 0L)
 
     fun subscribe(listener: SharedPreferences.OnSharedPreferenceChangeListener) =
         prefs.registerOnSharedPreferenceChangeListener(listener)
