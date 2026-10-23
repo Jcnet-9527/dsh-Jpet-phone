@@ -20,6 +20,9 @@ class SpeechModule(private val random: Random = Random.Default) : HostBoundModul
         if (pet.isCompanion || pet.engine.paused) return
         val pool = host.effectivePhrases()
         if (pool.isEmpty()) return
+        // The current animation may be saying its own line right now; two
+        // bubbles fighting for the same corner is worse than silence.
+        if (pet.engine.clip.line.isNotBlank()) return
         val now = host.now()
         val due = nextAt.getOrPut(pet.id) { now + host.options.speechDelayMs(random) }
         if (now < due) return
@@ -29,6 +32,9 @@ class SpeechModule(private val random: Random = Random.Default) : HostBoundModul
 
     override fun onEvent(event: PetEvent) {
         if (event !is PetEvent.Clicked || event.pet.isCompanion) return
+        // A tap animation that carries a line says it itself (the service shows
+        // it as the clip starts), so the pool must not talk over it.
+        if (event.pet.engine.clip.line.isNotBlank()) return
         speak(event.pet, host.effectivePhrases())
     }
 

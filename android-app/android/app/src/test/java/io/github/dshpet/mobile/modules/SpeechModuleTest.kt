@@ -1,6 +1,10 @@
 package io.github.dshpet.mobile.modules
 
+import io.github.dshpet.mobile.ClipSpec
+import io.github.dshpet.mobile.PetEngine
+import io.github.dshpet.mobile.PetHandle
 import io.github.dshpet.mobile.PetOptions
+import io.github.dshpet.mobile.SourceBox
 import kotlin.random.Random
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -25,9 +29,30 @@ class SpeechModuleTest {
 
     @Test
     fun anEmptyUserPoolFallsBackToTheBuiltInLines() {
+        // The pool mechanism still exists; the shipping catalog simply has no
+        // built-in lines any more, so in the app this branch says nothing.
         val (host, module) = fixture(PetOptions(phrases = emptyList()))
         module.onEvent(PetEvent.Clicked(host.pets[0]))
         assertEquals(listOf("好女孩……"), host.phrases)
+    }
+
+    @Test
+    fun aClipWithItsOwnLineKeepsThePoolQuiet() {
+        val host = FakeHost(PetOptions(phrases = listOf("池子里的台词")))
+        val pet = PetHandle(0, PetEngine(listOf(
+            ClipSpec("idle", "idle", 24.0, 4, crop = SourceBox(0.0, 0.0, 10.0, 10.0)),
+            ClipSpec("click", "click", 24.0, 4, crop = SourceBox(0.0, 0.0, 10.0, 10.0),
+                line = "别戳了！"),
+        )))
+        host.pets += pet
+        val module = SpeechModule(Random(5))
+        module.enable(host)
+        // The tap animation carries a line: the service shows that one, so the
+        // pool must not add a second bubble on top of it.
+        pet.engine.click()
+        module.onEvent(PetEvent.Clicked(pet))
+        module.onFrame(pet, .016)
+        assertEquals(0, host.phrases.size)
     }
 
     @Test

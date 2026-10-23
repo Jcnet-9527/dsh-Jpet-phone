@@ -25,11 +25,12 @@ import io.github.dshpet.mobile.R
 
 /**
  * The speech module: the bubble switch, the user's line pool and the schedule.
- * The pool commits on finish (save button or leaving the field); empty falls
- * back to the built-in lines, exactly like the desktop config.
+ * The pool commits on finish (save button or leaving the field). An empty pool
+ * is no longer "use the built-in lines" - there are none: the pet speaks when an
+ * animation that carries a line plays, and [lineCount] says how many do.
  */
 @Composable
-fun SpeechSection(options: PetOptions, builtinCount: Int, onChanged: (PetOptions) -> Unit) {
+fun SpeechSection(options: PetOptions, lineCount: Int, onChanged: (PetOptions) -> Unit) {
     SettingSwitch(R.string.speech, options.speech) { onChanged(options.copy(speech = it)) }
     if (options.speech) {
         val savedText = PhraseBook.asText(options.phrases)
@@ -54,7 +55,7 @@ fun SpeechSection(options: PetOptions, builtinCount: Int, onChanged: (PetOptions
                 onChanged(options.copy(phrases = emptyList()))
             }) { Text(stringResource(R.string.speech_clear)) }
         }
-        Text(stringResource(R.string.speech_builtin_hint, builtinCount))
+        Text(stringResource(R.string.speech_builtin_hint, lineCount))
         HorizontalDivider()
         var minDraft by remember(options.speechMinSeconds) { mutableStateOf(options.speechMinSeconds) }
         var maxDraft by remember(options.speechMaxSeconds) { mutableStateOf(options.speechMaxSeconds) }

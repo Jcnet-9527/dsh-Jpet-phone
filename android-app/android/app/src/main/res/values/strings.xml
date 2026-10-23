@@ -37,7 +37,15 @@
     <string name="speech_phrases_hint">每行一条台词</string>
     <string name="speech_save">保存台词</string>
     <string name="speech_clear">清空（用内置）</string>
-    <string name="speech_builtin_hint">留空时使用内置 %1$d 条台词。</string>
+    <string name="speech_builtin_hint">留空时不主动说话；带台词的动作（现在 %1$d 个）开始播放时会自己开口。</string>
+    <string name="update_check">检查更新</string>
+    <string name="update_checking">检查中…</string>
+    <string name="update_latest">已是最新版本</string>
+    <string name="update_failed">检查失败，稍后再试</string>
+    <string name="update_found_title">发现新版本 %1$s</string>
+    <string name="update_found_hint">更新后设置和已下载的动画都会保留。</string>
+    <string name="update_now">立即更新</string>
+    <string name="update_later">稍后</string>
     <string name="speech_interval_min">最短间隔</string>
     <string name="speech_interval_max">最长间隔</string>
     <string name="speech_duration">气泡停留</string>

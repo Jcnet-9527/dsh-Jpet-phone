@@ -24,6 +24,28 @@ class PetEngineTest {
         assertEquals(PetMode.IDLE, e.mode)
     }
 
+    @Test fun everyAnimationStartIsCountedEvenWhenItIsTheSameClip() {
+        val only = listOf(
+            ClipSpec("idle", "idle", 24.0, 24, line = "今天也要认真工作呀。"),
+            ClipSpec("turn", "turn", 24.0, 12),
+            ClipSpec("walk", "move", 24.0, 24, stride = 120.0),
+            ClipSpec("click", "click", 24.0, 12, line = "别戳了！"),
+            ClipSpec("drag", "drag", 24.0, 24),
+        )
+        val e = PetEngine(only, random = kotlin.random.Random(7)).apply {
+            resize(300.0, 600.0)
+            restorePosition(.5, .5)
+        }
+        val start = e.clipStarts
+        e.click()
+        assertEquals(start + 1, e.clipStarts)
+        assertEquals("别戳了！", e.clip.line)
+        // Replaying the clip that is already current still counts: the service
+        // compares this counter, not the clip id, so the line is said again.
+        e.play(e.clip)
+        assertEquals(start + 2, e.clipStarts)
+    }
+
     @Test fun effectsAnimationsNeverTurnUpOnTheirOwn() {
         val withFx = clips + ClipSpec("butterflies", "idle", 24.0, 24, fx = true)
         val e = PetEngine(withFx, random = kotlin.random.Random(3)).apply {

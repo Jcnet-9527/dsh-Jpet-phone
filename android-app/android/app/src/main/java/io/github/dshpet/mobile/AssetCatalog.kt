@@ -33,6 +33,13 @@ data class ClipSpec(
      * They are listed under 特效 and played when asked for, never at random.
      */
     val fx: Boolean = false,
+    /**
+     * The line this animation says when it starts, from
+     * ``assets/characters/shenshen/videos/clip_lines.json``. Empty for most
+     * clips: the pet used to draw random sentences from a separate pool, which
+     * had nothing to do with what it was doing on screen.
+     */
+    val line: String = "",
 ) {
     val duration get() = frames / fps
 
@@ -60,6 +67,9 @@ data class AssetCatalog(
      * with a capped opacity. One window, one alpha, no overlap.
      */
     val stageBox: SourceBox = WindowGeometry.union(clips)
+
+    /** How many animations carry a line of their own (the settings hint shows it). */
+    val lineCount: Int get() = clips.count { it.line.isNotBlank() }
 
     fun clipsIn(group: String): List<ClipSpec> = clips.filter { it.group == group }
 
@@ -105,7 +115,8 @@ data class AssetCatalog(
                     entry.getString("path"), crop,
                     entry.optString("name", ""),
                     if (fx) FX_CATEGORY else entry.optString("category", ""),
-                    entry.optBoolean("bundled", true), entry.optLong("bytes", 0L), fx).also {
+                    entry.optBoolean("bundled", true), entry.optLong("bytes", 0L), fx,
+                    entry.optString("line", "")).also {
                     require(it.frames in 1..10000 && it.fps.isFinite() && it.fps in 1.0..120.0)
                     require(it.path.matches(Regex("clips/[a-z]+_[a-f0-9]{12}")))
                     require(it.crop.width > 0 && it.crop.height > 0)

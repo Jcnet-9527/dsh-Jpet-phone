@@ -37,7 +37,15 @@
     <string name="speech_phrases_hint">One line per row</string>
     <string name="speech_save">Save lines</string>
     <string name="speech_clear">Clear (use built-ins)</string>
-    <string name="speech_builtin_hint">Empty uses the %1$d built-in lines.</string>
+    <string name="speech_builtin_hint">Empty means the pet stays quiet; the %1$d animations that carry a line say it when they play.</string>
+    <string name="update_check">Check for updates</string>
+    <string name="update_checking">Checking…</string>
+    <string name="update_latest">You are up to date</string>
+    <string name="update_failed">Check failed, try again later</string>
+    <string name="update_found_title">Version %1$s is available</string>
+    <string name="update_found_hint">Your settings and downloaded animations are kept.</string>
+    <string name="update_now">Update now</string>
+    <string name="update_later">Later</string>
     <string name="speech_interval_min">Shortest gap</string>
     <string name="speech_interval_max">Longest gap</string>
     <string name="speech_duration">Bubble stays</string>

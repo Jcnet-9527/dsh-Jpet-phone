@@ -6,6 +6,7 @@ import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 import java.nio.charset.StandardCharsets
+import java.util.Locale
 
 /** One turn of conversation. */
 data class ChatTurn(val role: String, val content: String)
@@ -16,6 +17,10 @@ data class ChatTurn(val role: String, val content: String)
  * its ending instead of guessing from the text.
  */
 data class ChatReply(val text: String, val truncated: Boolean = false)
+
+/** One currency's balance, exactly as `/user/balance` spells it out. */
+internal data class BalanceRow(val currency: String, val total: Double,
+                               val granted: Double, val toppedUp: Double)
 
 /**
  * The only network code in the app. It speaks the OpenAI-compatible chat
@@ -133,22 +138,78 @@ object ChatClient {
             val stream = if (status in 200..299) connection.inputStream else connection.errorStream
             val body = stream?.bufferedReader(StandardCharsets.UTF_8)?.use { it.readText() }.orEmpty()
             if (status !in 200..299) throw ChatException(readError(body, status))
-            val parsed = runCatching { JSONObject(body) }.getOrNull()
-                ?: throw ChatException("余额返回无法解析")
-            val balances = parsed.optJSONObject("balance_infos")?.let { info ->
-                info.keys().asSequence().mapNotNull { key ->
-                    val entry = info.optJSONObject(key) ?: return@mapNotNull null
-                    val amount = entry.optString("total_balance", "0").toDoubleOrNull() ?: 0.0
-                    "$key ${"%.2f".format(amount)}"
-                }.toList().sorted()
-            }.orEmpty()
-            val granted = parsed.optBoolean("is_available", true)
-            if (!granted) "余额已耗尽或账号受限"
-            else balances.joinToString(" · ").ifBlank { "余额查询成功，但接口没给出数字" }
+            formatBalance(body)
         } catch (e: IOException) {
             throw ChatException("连不上接口：${e.message ?: "网络错误"}")
         } finally {
             connection.disconnect()
         }
+    }
+
+    /**
+     * Turns a `/user/balance` body into one bubble line.
+     *
+     * `balance_infos` is an **array** (`object[]`) - reading it as an object is
+     * what made every query end with "查询成功，但接口没给出数字": `optJSONObject`
+     * returns null for an array, the list came out empty, and the blank fallback
+     * fired.
+     */
+    fun formatBalance(body: String): String {
+        val parsed = runCatching { JSONObject(body) }.getOrNull()
+            ?: throw ChatException("余额返回无法解析")
+        if (!parsed.optBoolean("is_available", true)) return "余额已耗尽或账号受限"
+        return renderBalance(balanceRows(parsed))
+    }
+
+    /**
+     * Reads the currency rows. The array shape is the documented one; a plain
+     * object is still accepted because some OpenAI-compatible proxies rewrite
+     * the payload, and a lookup that only knows one shape is how the original
+     * bug went unnoticed.
+     */
+    private fun balanceRows(parsed: JSONObject): List<BalanceRow> {
+        val rows = ArrayList<BalanceRow>()
+        fun take(entry: JSONObject?) {
+            if (entry == null) return
+            val total = entry.optString("total_balance", "").toDoubleOrNull() ?: return
+            rows += BalanceRow(entry.optString("currency", ""), total,
+                entry.optString("granted_balance", "").toDoubleOrNull() ?: 0.0,
+                entry.optString("topped_up_balance", "").toDoubleOrNull() ?: 0.0)
+        }
+        val array = parsed.optJSONArray("balance_infos")
+        if (array != null) {
+            for (index in 0 until array.length()) take(array.optJSONObject(index))
+        } else {
+            parsed.optJSONObject("balance_infos")?.let { keyed ->
+                keyed.keys().asSequence().forEach { take(keyed.optJSONObject(it)) }
+            }
+        }
+        return rows
+    }
+
+    /** The bubble text for [rows]; pure, so the formatting is unit-tested. */
+    internal fun renderBalance(rows: List<BalanceRow>): String {
+        if (rows.isEmpty()) return "余额查询成功，但接口没给出数字"
+        // Two currencies have no common unit: list them, and skip the split
+        // (it would be twice as long as the bubble likes).
+        if (rows.size > 1) {
+            return "余额 " + rows.joinToString(" · ") { money(it.currency, it.total) }
+        }
+        val row = rows.first()
+        val detail = ArrayList<String>()
+        if (row.granted > 0) detail += "赠金 " + money(row.currency, row.granted)
+        if (row.toppedUp > 0) detail += "充值 " + money(row.currency, row.toppedUp)
+        val head = "余额 " + money(row.currency, row.total)
+        return if (detail.isEmpty()) head else head + "（" + detail.joinToString(" · ") + "）"
+    }
+
+    /** A currency's own sign when we know it; the code itself otherwise. */
+    private fun money(currency: String, amount: Double): String {
+        val sign = when (currency.uppercase()) {
+            "CNY" -> "¥"
+            "USD" -> "$"
+            else -> if (currency.isBlank()) "" else "$currency "
+        }
+        return sign + String.format(Locale.US, "%.2f", amount)
     }
 }
