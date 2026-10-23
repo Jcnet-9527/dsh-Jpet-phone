@@ -86,32 +86,9 @@ def publish_frames(jobs: list[tuple[Path, Path]], quality: int | None) -> None:
             pass
 
 
-def clip_line(name: str, lines: dict[str, str]) -> str:
-    """The line spoken while ``name`` plays, or "".
-
-    Three passes, in order of confidence: the exact clip name, the clip name
-    without its group prefix (``点击回应-傲娇生气`` -> ``傲娇生气``), and finally a
-    plain substring hit (``是啊，吃什么`` -> ``吃什么``). Being forgiving here is
-    deliberate: the action list is written by hand and a strict lookup silently
-    drops a whole line.
-    """
-    if not lines:
-        return ""
-    if name in lines:
-        return lines[name]
-    for key, text in lines.items():
-        if name.endswith("-" + key):
-            return text
-    for key, text in lines.items():
-        if key in name:
-            return text
-    return ""
-
-
 def export_prepared(videos: Path, prepared: dict[Path, Path], output: Path,
                     phrases: list[str], alias: dict[str, str] | None = None,
-                    quality: int | None = None,
-                    lines: dict[str, str] | None = None) -> dict:
+                    quality: int | None = None) -> dict:
     videos, output = videos.resolve(), output.resolve()
     if output == videos or videos in output.parents or output in videos.parents:
         raise ValueError("output overlaps the source package")
@@ -163,7 +140,6 @@ def export_prepared(videos: Path, prepared: dict[Path, Path], output: Path,
                       "path": f"clips/{identity}", "crop_box": crop,
                       "stride": float(movement.get("stride", 180)),
                       "curve": movement.get("curve", []),
-                      "line": clip_line(source.stem, lines or {}),
                       "_directory": directory})
     if canvas is None:
         raise ValueError("no frames")
@@ -203,6 +179,7 @@ def main() -> int:
         help="re-encode frames lossy at this quality (e.g. 80); default ships them verbatim")
     args = parser.parse_args()
     sys.path.insert(0, str(ROOT))
+    from pet.config import DEFAULT_SELF_TALK_TEXTS
     from pet.frameseq_provision import clip_out_dir, convert_clip, hot_webms
     from scripts.make_icon import prepare_icon_image
 
@@ -210,21 +187,23 @@ def main() -> int:
     videos = ROOT / "assets/characters/shenshen/videos"
     folders = (sorted(CORE_GROUPS) if args.core_only
                else [f.strip() for f in args.folders.split(",") if f.strip()])
-    prepared = {}
-    for source in hot_webms(videos, folders):
+    from concurrent.futures import ThreadPoolExecutor
+    import os
+
+    def _prepare(source):
         directory = clip_out_dir(source, videos, videos.parent / "frameseq")
         _, error = convert_clip(source, directory)
         if error:
             raise RuntimeError(f"{source.name}: {error}")
-        prepared[source] = directory
-    lines_file = videos / "clip_lines.json"
-    lines = ({k: str(v) for k, v in json.loads(lines_file.read_text(encoding="utf-8"))
-              .get("lines", {}).items()} if lines_file.exists() else {})
-    # The generic self-talk pool is gone on purpose: the pet speaks when an
-    # animation that has a line plays (``clip_lines.json``), never from a
-    # hard-coded list of unrelated sentences. The desktop keeps its own pool.
-    manifest = export_prepared(videos, prepared, args.output, [],
-        quality=args.webp_quality, lines=lines)
+        return source, directory
+
+    prepared = {}
+    workers = max(1, int(os.environ.get("PET_EXPORT_JOBS", "4")))
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        for source, directory in pool.map(_prepare, list(hot_webms(videos, folders))):
+            prepared[source] = directory
+    manifest = export_prepared(videos, prepared, args.output, DEFAULT_SELF_TALK_TEXTS,
+        quality=args.webp_quality)
     copy_notices(args.output)
     if args.res_output:
         idle = next(c for c in manifest["clips"] if c["group"] == "idle")

@@ -50,14 +50,6 @@ class PetEngine(clips: List<ClipSpec>, private val random: Random = Random.Defau
     private val pools = clips.filter { !it.fx }.groupBy { it.group }
     var clip: ClipSpec = (pools["idle"] ?: groups.getValue("idle")).first()
         private set
-
-    /**
-     * Bumped every time an animation starts, even when it is the same clip that
-     * was already playing. The service watches this to show the line a clip
-     * carries: comparing clip ids would miss "play that one again".
-     */
-    var clipStarts: Long = 0L
-        private set
     var mode = PetMode.IDLE
         private set
     var x = 0.0
@@ -66,6 +58,11 @@ class PetEngine(clips: List<ClipSpec>, private val random: Random = Random.Defau
         private set
     var vx = 0.0
         private set
+
+    /** Visual lean in radians (positive = clockwise), driven by the shake module. */
+    var tilt = 0.0
+    var tiltVelocity = 0.0
+
     var vy = 0.0
         private set
     var facingRight = false
@@ -170,7 +167,7 @@ class PetEngine(clips: List<ClipSpec>, private val random: Random = Random.Defau
     }
 
     private fun enter(next: PetMode, animation: ClipSpec) {
-        mode = next; clip = animation; elapsed = 0.0; clipStarts++
+        mode = next; clip = animation; elapsed = 0.0
     }
     private fun idle() {
         vx = 0.0; vy = 0.0; pendingMove = null

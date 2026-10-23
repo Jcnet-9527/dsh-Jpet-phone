@@ -1,14 +1,17 @@
-node_modules/
-*.log
-.DS_Store
-
-# ---- 安卓原生 App 工程（android-app/）----
+# 构建产物
+android-app/android/app/build/
 android-app/android/build/
 android-app/android/.gradle/
 android-app/android/local.properties
-android-app/dist-remote/
-android-app/dist-android/
-android-app/**/__pycache__/
-android-app/assets/characters/shenshen/frameseq/
-android-app/assets/characters/shenshen/videos/**/*.webm
+android-app/android/app/release/
+dist-remote/
 *.apk
+*.aab
+
+# 构建期生成的素材（可用 scripts/ 重新拉取/生成）
+android-app/assets/characters/*/videos/
+android-app/assets/characters/*/frameseq/
+
+# Python 缓存
+__pycache__/
+*.pyc

@@ -5,6 +5,7 @@ import android.os.Handler
 import android.os.Looper
 import io.github.dshpet.mobile.ChatActivity
 import io.github.dshpet.mobile.ChatClient
+import io.github.dshpet.mobile.DshClient
 import io.github.dshpet.mobile.ChatReply
 import io.github.dshpet.mobile.ChatTurn
 import io.github.dshpet.mobile.ModuleIds
@@ -97,6 +98,19 @@ class ChatModule : HostBoundModule() {
      */
     fun send(text: String, petId: Int, onDone: (Result<String>) -> Unit) {
         val options = host.options
+        if (options.dsh) {
+            worker.execute {
+                val reply = runCatching {
+                    DshClient.chat(options.dshBaseUrl, options.dshToken, "main", text)
+                }
+                main.post {
+                    if (!alive.get()) return@post
+                    reply.getOrNull()?.let { announce(petId, it) }
+                    onDone(reply.map { it.text })
+                }
+            }
+            return
+        }
         if (!options.chatConfigured) {
             onDone(Result.failure(ChatClient.ChatException(missingText(options))))
             return
@@ -125,6 +139,19 @@ class ChatModule : HostBoundModule() {
     /** DeepSeek-only balance query, shown as a bubble and returned to the caller. */
     fun balance(petId: Int, onDone: (Result<String>) -> Unit) {
         val options = host.options
+        if (options.dsh) {
+            worker.execute {
+                val result = runCatching {
+                    "余额：" + DshClient.balanceText(options.dshBaseUrl, options.dshToken)
+                }
+                main.post {
+                    if (!alive.get()) return@post
+                    announce(petId, ChatReply(result.fold({ it }, { it.message ?: "查询失败" })))
+                    onDone(result)
+                }
+            }
+            return
+        }
         if (options.chatApiKey.isBlank()) {
             val message = missingText(options)
             announce(petId, ChatReply(message))

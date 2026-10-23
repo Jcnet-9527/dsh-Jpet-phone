@@ -1,0 +1,112 @@
+# DSH 桌宠 · 安卓悬浮版（定制分支）
+
+本仓库基于 [Jcnet-9527/dsh-Jpet-phone](https://github.com/Jcnet-9527/dsh-Jpet-phone) **v0.6.2**（上游 commit `8e39347`）定制，遵循上游 **MIT** 许可。
+
+目标：在保留上游全部桌宠表现（动画、物理、音效、语音、多宠）的前提下，补上三件事——
+**与 DSH 深度联动**、**息屏/开机后自动恢复**、**摇晃互动**，并让整条构建链能在 **ARM64 Linux（如 Termux/proot）** 上跑通。
+
+---
+
+## 一、与上游的差异（6 组）
+
+### 1. 与 DSH 深度联动：余额 / 碎碎念 / 聊天
+- 新增 `DshClient.kt`：用 DSH 启动 token 换 cookie，调用 dsh-pet 宿主暴露的 HTTP 路由
+  - `POST /dsh-pet-7340/chat?pet=main&surface=any` → 带记忆的对话（用 DSH 里配的模型与人设）
+  - `POST /dsh-pet-7340/whisper?pet=main&surface=any` → 一句碎碎念（模型生成）
+  - `GET  /dsh-pet-7340/state` → 读取 `sections.balance.data` 里的余额
+- `PetPreferences` 新增 `dsh / dshBaseUrl / dshToken`（默认 `http://127.0.0.1:3081`）
+- `ChatModule`、`ChatActivity`、`SpeechModule` 在 `dsh` 开启时改走 DSH，否则保持上游的 OpenAI 兼容逻辑
+- 设置页新增「联动 DSH」开关 + 地址 + token（`ui/ChatSection.kt`）
+
+> 说明：token 每次 DSH 重启都会变，需在 App 内更新一次；地址与 DSH 同机时用 loopback 即可。
+
+### 2. 息屏 / 开机后自动恢复
+上游的问题是：服务返回 `START_NOT_STICKY`，且息屏时 `removeWindows()` 删窗口、亮屏重建可能失败，
+导致解锁后桌宠消失、必须回 App 点启动。
+
+修复：
+- `PetOverlayService` 改为 `START_STICKY`，并持久化 `running` 标记；被系统重启时（intent == null）自动 `startPet()`
+- **息屏不再删除窗口**，只暂停动画（窗口在屏幕关闭时几乎不耗电）
+- 3 秒自愈轮询：`windows == 0` 或 `interactive` 状态变化时自动重建/恢复渲染
+  （部分 ROM 不派发 `SCREEN_ON`/`USER_PRESENT` 给清单接收器，只能轮询）
+- `WatchdogReceiver`：`AlarmManager.setAndAllowWhileIdle` 看门狗，息屏期间每 2 分钟自检，**进程被杀也能触发**
+- `ScreenWakeReceiver`（清单注册，尽力而为）、`BootReceiver`（开机自启，仅在用户未手动停止时）
+
+### 3. 摇晃互动（加速度计）
+- 新增 `modules/ShakeModule.kt`：**不需要任何权限**，只用 `TYPE_ACCELEROMETER`
+  - 低通去重力 + 高频能量阈值（≈0.2g，冷却 200ms）判定"摇晃"，避免正常走动误触
+  - 检测到摇晃：给每只宠物注入冲量（复用上游 `nudge` 的碰撞/甩飞/边界逻辑）并触发 Q 弹
+  - 持续倾斜：`PetEngine.tilt/tiltVelocity` 弹簧阻尼，`PetView.onDraw` 绕**底边中点**旋转 + 轻微横移
+  - 仅在亮屏解锁时注册传感器，息屏/暂停自动注销
+- `PetPreferences` 新增 `shake / shakeStrength`；设置页新增「摇晃互动」开关与强度滑杆（`ui/ShakeSection.kt`）
+
+### 4. 构建链适配 ARM64 Linux / 老 aapt2
+上游默认要求 `compileSdk 36`，而 aarch64 可用的 aapt2（Debian 2.19）读不了 API 35/36 的资源表：
+- `app/build.gradle.kts`：`compileSdk/targetSdk` 34、依赖降到 compileSdk 34 可用的版本
+  （Compose BOM 2024.06.00、activity-compose 1.9.0、core-ktx 1.13.1、coroutines 1.8.1）
+- `gradle.properties`：`android.aapt2FromMavenOverride=/usr/bin/aapt2`（指向本机 aarch64 aapt2）
+- `scripts/fetch_character_videos.py`：给中文文件名补 URL 编码（上游直接拼 URL 会抛 UnicodeEncodeError）
+- `scripts/export_android_assets.py`：逐段串行转帧改为 `PET_EXPORT_JOBS` 并发（106 段从 ~2 小时降到 ~40 分钟）
+
+> 若你在 x86_64 主机构建，可把 `compileSdk` 调回 36 并移除 aapt2 override。
+
+### 5. 版本号与包名
+- `applicationId` 改为 `io.github.dshpet.mobile.dsh`，可与上游正式版**并存安装**
+- `versionName` 采用 `0.6.2-dsh.N`、`versionCode` 递增，避免每次安装提示"已安装相同版本"
+
+### 6. 调试钩子（仅 debug 构建）
+- `pet.SHAKE_TEST` 动作 + `MainActivity --ez shakeTest true`：注入一次模拟摇晃，便于自动化验证
+- `files/pet-events.log`：息屏/亮屏/自愈/看门狗/注入等事件留痕，用于排查"桌宠不见了"
+- 以上均由 `BuildConfig.DEBUG` 保护，**release 包不生效**
+
+---
+
+## 二、构建
+
+标准环境（x86_64 + Android SDK 36）：
+
+```bash
+cd android-app
+python3 -m pip install pillow
+python3 scripts/fetch_character_videos.py      # 拉取 52MB 源视频
+cd android
+./gradlew :app:assembleDebug -PpetPython=python3
+```
+
+本仓库当前为 **ARM64 Linux** 适配的配置（见差异 4），我这边实际使用的流程：
+
+```bash
+cd android-app
+python3 -m pip install pillow PySide6 imageio-ffmpeg
+python3 scripts/fetch_character_videos.py
+cd android
+/opt/gradle-8.13/bin/gradle :app:assembleDebug -PpetPython=python3
+```
+
+产物：`android/app/build/outputs/apk/debug/app-debug.apk`
+
+> 构建脚本会调用 `scripts/export_android_assets.py` 把 webm 逐帧转成无损 webp，
+> 首次构建较慢（本项目 106 段 / 25423 帧）；之后走缓存。
+> `android-app/android/local.properties`（`sdk.dir=...`）请勿提交。
+
+---
+
+## 三、版本历史
+
+| 版本 | 内容 |
+|---|---|
+| `0.6.2-dsh.10` | 首个可安装版本；DSH 联动（chat/whisper/balance）跑通 |
+| `0.6.2-dsh.11` | 息屏不删窗口 + 3 秒自愈；修复"解锁后桌宠消失" |
+| `0.6.2-dsh.12` | 解锁状态轮询，修复"开机后静态、需手动点启动" |
+| `0.6.2-dsh.13` | 摇晃互动首版（加速度计 + 弹簧倾斜 + 冲量 + 设置项） |
+| `0.6.2-dsh.14` ~ `.17` | 摇晃注入/调试钩子、版本号自增机制、传感器接线验证 |
+| `0.6.2-dsh.18` | 摇晃手感调优：阈值 3.4→2.0、倾斜增益 0.55→1.05、冲量 90+260s→160+560s |
+
+详细文件级改动见 [`docs/CHANGES-vs-upstream.md`](docs/CHANGES-vs-upstream.md)。
+
+---
+
+## 四、许可与上游
+
+- 本仓库继承上游 **MIT**；请保留 `LICENSE`、`android-app/LICENSE-APACHE-2.0.txt`、`android-app/NOTICE.txt`、`android-app/THIRD_PARTY_NOTICES.md`。
+- 上游仍有更新（0.6.3 起新增更新检测 / 动作台词 / 小鲸鱼人设 / 余额修复），合并时注意本仓库差异 4 的构建配置会被覆盖。

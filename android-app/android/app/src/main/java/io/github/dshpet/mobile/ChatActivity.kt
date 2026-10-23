@@ -179,8 +179,12 @@ private fun ChatScreen(preferences: PetPreferences, petId: Int, onClose: () -> U
                             val snapshot = preferences.options()
                             worker.execute {
                                 val reply = runCatching {
-                                    ChatClient.complete(snapshot.chatBaseUrl, snapshot.chatApiKey,
-                                        snapshot.chatModel, snapshot.chatSystem, emptyList(), text)
+                                    if (snapshot.dsh) {
+                                        DshClient.chat(snapshot.dshBaseUrl, snapshot.dshToken, "main", text)
+                                    } else {
+                                        ChatClient.complete(snapshot.chatBaseUrl, snapshot.chatApiKey,
+                                            snapshot.chatModel, snapshot.chatSystem, emptyList(), text)
+                                    }
                                 }
                                 main.post {
                                     busy = false
