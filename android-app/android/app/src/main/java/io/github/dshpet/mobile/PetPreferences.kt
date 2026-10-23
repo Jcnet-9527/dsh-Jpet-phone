@@ -27,6 +27,9 @@ data class PetOptions(
     val chatSystem: String = DEFAULT_CHAT_SYSTEM,
     val chatMemory: Int = DEFAULT_CHAT_MEMORY,
     val chatBalance: Boolean = true,
+    /** Let every tap pass through the pet to the app underneath (no drag/click). */
+    val touchThrough: Boolean = false,
+
     /** Shake the phone and the pet sways, bounces and settles. */
     val shake: Boolean = true,
     val shakeStrength: Float = .5f,
@@ -182,6 +185,7 @@ class PetPreferences(private val context: Context) {
         private const val KEY_CHAT_SYSTEM = "chatSystem"
         private const val KEY_CHAT_MEMORY = "chatMemory"
         private const val KEY_CHAT_BALANCE = "chatBalance"
+        private const val KEY_TOUCH_THROUGH = "touchThrough"
         private const val KEY_SHAKE = "shake"
         private const val KEY_SHAKE_STRENGTH = "shakeStrength"
         private const val KEY_DSH = "dsh"
@@ -252,6 +256,7 @@ class PetPreferences(private val context: Context) {
             ?: PetOptions.DEFAULT_CHAT_SYSTEM,
         chatMemory = prefs.getInt(KEY_CHAT_MEMORY, PetOptions.DEFAULT_CHAT_MEMORY),
         chatBalance = prefs.getBoolean(KEY_CHAT_BALANCE, true),
+        touchThrough = prefs.getBoolean(KEY_TOUCH_THROUGH, false),
         shake = prefs.getBoolean(KEY_SHAKE, true),
         shakeStrength = prefs.getFloat(KEY_SHAKE_STRENGTH, .5f),
         dsh = prefs.getBoolean(KEY_DSH, false),
@@ -291,6 +296,7 @@ class PetPreferences(private val context: Context) {
             .putString(KEY_CHAT_SYSTEM, normalized.chatSystem)
             .putInt(KEY_CHAT_MEMORY, normalized.chatMemory)
             .putBoolean(KEY_CHAT_BALANCE, normalized.chatBalance)
+            .putBoolean(KEY_TOUCH_THROUGH, normalized.touchThrough)
             .putBoolean(KEY_SHAKE, normalized.shake)
             .putFloat(KEY_SHAKE_STRENGTH, normalized.shakeStrength)
             .putBoolean(KEY_DSH, normalized.dsh)

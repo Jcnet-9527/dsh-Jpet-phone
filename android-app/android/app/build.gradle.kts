@@ -12,8 +12,8 @@ android {
         applicationId = "io.github.dshpet.mobile.dsh"
         minSdk = 26
         targetSdk = 34
-        versionCode = 18
-        versionName = "0.6.2-dsh.18"
+        versionCode = 19
+        versionName = "0.6.2-dsh.19"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // The voice runtime (sherpa-onnx) ships one .so per ABI; real phones
         // are all ARM, so the emulator ABIs stay out and the APK stays small.

@@ -155,4 +155,6 @@
     <string name="allow_background">允许后台常驻（息屏后不消失）</string>
     <string name="shake">摇晃互动（摇手机时桌宠会晃）</string>
     <string name="shake_strength">摇晃强度</string>
+    <string name="touch_through">点击穿透（不再挡住其他 App 的点击）</string>
+    <string name="touch_through_hint">开启后桌宠照常动，但不能再拖动或点击它。</string>
 </resources>

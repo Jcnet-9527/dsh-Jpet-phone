@@ -71,6 +71,7 @@ import io.github.dshpet.mobile.ui.CollisionSection
 import io.github.dshpet.mobile.ui.CompanionSection
 import io.github.dshpet.mobile.ui.SectionTitle
 import io.github.dshpet.mobile.ui.ShakeSection
+import io.github.dshpet.mobile.ui.TouchSection
 import io.github.dshpet.mobile.ui.SpeechSection
 import io.github.dshpet.mobile.ui.VoiceSection
 import io.github.dshpet.mobile.ui.WanderSection
@@ -269,6 +270,7 @@ class MainActivity : ComponentActivity() {
                     SectionTitle(R.string.interaction)
                     WanderSection(options) { save(it) }
                     ShakeSection(options) { save(it) }
+                    TouchSection(options) { save(it) }
                     SpeechSection(options, builtinCount) { save(it) }
                     ClickSoundSection(options, audioName, { save(it) },
                         onPick = { audioPicker.launch(arrayOf("audio/*")) },
