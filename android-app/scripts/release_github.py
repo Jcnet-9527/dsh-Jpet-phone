@@ -149,9 +149,15 @@ def main() -> int:
 
     asset_name = f"shenshen-{version}.apk"
     upload = f"https://uploads.github.com/repos/{args.repo}/releases/{release['id']}/assets?name={asset_name}"
-    run(["curl", "-sS", "-X", "POST", "-H", f"Authorization: token {token}",
+    # The token must not end up in the console: never print this command.
+    print(f"+ curl -X POST ... (token hidden) {upload}", flush=True)
+    result = subprocess.run(
+        ["curl", "-sS", "-X", "POST", "-H", f"Authorization: token {token}",
          "-H", "Content-Type: application/vnd.android.package-archive",
-         "--data-binary", f"@{apk}", upload])
+         "--data-binary", f"@{apk}", upload],
+        check=True, capture_output=True, text=True)
+    asset = json.loads(result.stdout)
+    print("asset", asset.get("name"), asset.get("size"), asset.get("state"))
 
     if not args.draft:
         api("PATCH", f"/repos/{args.repo}/releases/{release['id']}", token, {"draft": False})
