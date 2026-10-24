@@ -16,7 +16,9 @@ import android.view.VelocityTracker
 import android.view.View
 import android.view.ViewConfiguration
 import android.view.animation.LinearInterpolator
+import kotlin.math.cos
 import kotlin.math.hypot
+import kotlin.math.sin
 
 /**
  * One pet's transparent surface.
@@ -166,6 +168,14 @@ class PetView(
                 destinationRect.centerX(), destinationRect.bottom)
             canvas.translate((lean * destinationRect.height() * 0.32).toFloat(), 0f)
         }
+        // The peek's head tilt. It is applied before the mirror so the angle is
+        // read in screen space: clockwise always leans the head towards the
+        // middle of the screen, whichever edge the pet is on.
+        val wallLean = engine.wallLean
+        if (wallLean != 0.0) {
+            canvas.rotate((wallLean * 180.0 / Math.PI).toFloat(),
+                destinationRect.centerX(), destinationRect.centerY())
+        }
         if (current.mirrored) {
             canvas.scale(-1f, 1f, destinationRect.centerX(), destinationRect.centerY())
         }
@@ -295,8 +305,23 @@ class PetView(
         val offset = WindowGeometry.contentOffset(crop, stage, renderScale)
         val width = (crop.width * renderScale).toFloat()
         val height = (crop.height * renderScale).toFloat()
-        val point = TapTarget.sourcePoint(x, y, offset, width, height, current.mirrored)
-            ?: return false
+        // The peek rotates the picture around its centre; undo that before
+        // sampling, or taps on the leaning head would land on empty pixels.
+        var sampleX = x
+        var sampleY = y
+        if (engine.wallLean != 0.0) {
+            val cx = offset.x + width / 2f
+            val cy = offset.y + height / 2f
+            val a = -engine.wallLean
+            val c = cos(a).toFloat()
+            val s = sin(a).toFloat()
+            val dx = x - cx
+            val dy = y - cy
+            sampleX = cx + dx * c - dy * s
+            sampleY = cy + dx * s + dy * c
+        }
+        val point = TapTarget.sourcePoint(sampleX, sampleY, offset, width, height,
+            current.mirrored) ?: return false
         val pixelX = (crop.left + point.first * crop.width).toInt().coerceIn(0, bitmap.width - 1)
         val pixelY = (crop.top + point.second * crop.height).toInt().coerceIn(0, bitmap.height - 1)
         return Color.alpha(bitmap.getPixel(pixelX, pixelY)) >= TapTarget.MIN_ALPHA

@@ -59,6 +59,7 @@ import io.github.dshpet.mobile.modules.VoiceModule
 import io.github.dshpet.mobile.modules.WanderModule
 import java.io.FileDescriptor
 import java.io.PrintWriter
+import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.roundToInt
 
@@ -121,9 +122,12 @@ class PetOverlayService : Service(), Choreographer.FrameCallback, ModuleHost, Pe
         /** The same sentence twice inside this window is a repeat, not a line. */
         private const val CLIP_LINE_REPEAT_MS = 10_000L
 
-        /** How long a hang lasts: 30 s to 90 s. */
-        private const val WALL_STAY_MIN_MS = 30_000L
-        private const val WALL_STAY_MAX_MS = 90_000L
+        /**
+         * Extra source-unit margin added around the frame while the pet leans
+         * out of the edge: rotation swings its head past the clip's own box and
+         * the window would cut it off.
+         */
+        private const val WALL_LEAN_PAD = 70.0
 
         fun command(context: Context, action: String) {
             try {
@@ -165,6 +169,8 @@ class PetOverlayService : Service(), Choreographer.FrameCallback, ModuleHost, Pe
         var grab: View? = null
         /** The last [PetEngine.clipStarts] this surface has shown a line for. */
         var clipStart = -1L
+        /** The last landing this surface has already squashed for. */
+        var landings = 0L
     }
 
     private val handler = Handler(Looper.getMainLooper())
@@ -437,7 +443,14 @@ class PetOverlayService : Service(), Choreographer.FrameCallback, ModuleHost, Pe
      * the union of every clip made the window ~4x the pet's own area, so taps on
      * the transparent margin were swallowed instead of reaching the app below.
      */
-    private fun stageFor(clip: ClipSpec): SourceBox = clip.crop
+    private fun stageFor(engine: PetEngine, clip: ClipSpec): SourceBox {
+        val crop = clip.crop
+        // Padding for the whole visit, not only while leaning: tying it to the
+        // lean made the window grow and shrink on every little climbing wobble.
+        if (engine.wallSide == 0) return crop
+        val pad = WALL_LEAN_PAD
+        return SourceBox(crop.left - pad, crop.top - pad, crop.right + pad, crop.bottom + pad)
+    }
 
     /**
      * When the pet next goes to hang on an edge, and when it should let go.
@@ -447,9 +460,10 @@ class PetOverlayService : Service(), Choreographer.FrameCallback, ModuleHost, Pe
      * every twenty seconds would be a nuisance, not companionship.
      */
     private var wallNextAt = 0L
-    private var wallLeaveAt = 0L
     /** Whether the previous tick saw the pet on an edge, to reschedule on any departure. */
     private var wallWasOn = false
+    private var loggedWallPhase = WallPhase.NONE
+    private var loggedPeekAction = PeekAction.NORMAL
 
     private fun wallIntervalMs(): Long {
         val minutes = settings.wallMinutes.coerceIn(1, 30)
@@ -464,15 +478,23 @@ class PetOverlayService : Service(), Choreographer.FrameCallback, ModuleHost, Pe
         val handle = petMap[0] ?: return
         val engine = handle.engine
         val now = SystemClock.elapsedRealtime()
+        if (engine.wallPhase != loggedWallPhase) {
+            loggedWallPhase = engine.wallPhase
+            preferences.log("wall: phase=${engine.wallPhase} x=${"%.1f".format(engine.x)} y=${"%.1f".format(engine.y)} lean=${"%.2f".format(engine.wallLean)}")
+        }
+        if (engine.peekAction != loggedPeekAction) {
+            loggedPeekAction = engine.peekAction
+            preferences.log("wall: peek=${engine.peekAction}")
+        }
         if (engine.wallSide != 0) {
             wallWasOn = true
-            // Turning the switch off (or shortening the stay) must not leave the
-            // pet stranded past the edge, so the wall clock keeps running.
-            if (now >= wallLeaveAt || !settings.wall) {
+            // The performance has its own clock; the service only steps in when
+            // the switch is turned off, so a pet never stays stranded outside.
+            if (!settings.wall) {
                 engine.leaveWall(fall = true)
                 wallWasOn = false
                 wallNextAt = now + wallIntervalMs()
-                preferences.log("wall: let go")
+                preferences.log("wall: aborted by setting")
             }
             return
         }
@@ -503,11 +525,13 @@ class PetOverlayService : Service(), Choreographer.FrameCallback, ModuleHost, Pe
     }
 
     /**
-     * Pins the pet to one edge with only [WALL_PEEK] of its body on screen.
+     * Starts a full visit: the pet walks to the edge, climbs up in steps, peeks
+     * out, watches, then climbs back down. The service only provides geometry;
+     * every position after this call belongs to the engine.
      *
-     * The window is still the clip's crop, so a negative x simply lets the
-     * system clip the part that hangs over the edge - no window maths changes.
-     * The pet then climbs to a random height by itself.
+     * Three x values: standing at the edge (fully visible), hanging while
+     * climbing (leaning over the edge), and tucked in for the peek (the lean
+     * brings the head back inside the screen).
      */
     private fun enterWall(side: Int) {
         val handle = petMap[0] ?: return
@@ -516,26 +540,25 @@ class PetOverlayService : Service(), Choreographer.FrameCallback, ModuleHost, Pe
         val scale = scaleOf(handle)
         if (!scale.isFinite() || scale <= .1) return
         val body = catalog.body
-        // The slider's share of the body stays inside the screen: the rest hangs
-        // past the edge and is clipped by the system. No inset here - a gap on
-        // the clipped side would simply reveal more of the pet.
         val peek = settings.wallPeek.toDouble().coerceIn(.3, .65)
-        val x = if (side < 0) {
-            safe.left / scale - body.width * (1.0 - peek)
+        fun bodyX(visible: Double) = if (side < 0) {
+            safe.left / scale - body.width * (1.0 - visible)
         } else {
-            safe.right / scale - body.width * peek
+            safe.right / scale - body.width * visible
         }
-        engine.clingToWall(side, bodyX = x, bodyHeight = body.height)
+        val forced = PeekAction.entries.firstOrNull {
+            it.name.equals(settings.wallPeekAction, ignoreCase = true)
+        }
+        engine.startWall(side, walkX = bodyX(1.0), climbX = bodyX(.58),
+            peekX = bodyX(peek), bodyHeight = body.height,
+            staySeconds = settings.wallStaySeconds, forcedPeek = forced)
         // A wall pet that is dragged off must not jump straight back on: the
-        // next visit is scheduled from this cling, not from the last let-go.
+        // next visit is scheduled from this start, not from the last finish.
         wallNextAt = SystemClock.elapsedRealtime() + wallIntervalMs()
         // The hold-to-talk button follows the pet and would hang half off the
-        // screen; the menu reopens it. Bubbles still work while hanging.
+        // screen; the menu reopens it. Bubbles still work while peeking.
         hideVoiceButton()
-        val stay = WALL_STAY_MIN_MS +
-            (Math.random() * (WALL_STAY_MAX_MS - WALL_STAY_MIN_MS)).toLong()
-        wallLeaveAt = SystemClock.elapsedRealtime() + stay
-        preferences.log("wall: cling side=$side x=$x y=${engine.y}")
+        preferences.log("wall: start side=$side walk=${bodyX(1.0)} climb=${bodyX(.58)} peek=${bodyX(peek)}")
     }
 
     private fun attach(handle: PetHandle): Boolean {
@@ -543,7 +566,7 @@ class PetOverlayService : Service(), Choreographer.FrameCallback, ModuleHost, Pe
         val scale = scaleOf(handle)
         resizeEngine(handle.engine, scale)
         val engine = handle.engine
-        val stage = stageFor(engine.clip)
+        val stage = stageFor(engine, engine.clip)
         val placement = WindowGeometry.placement(engine.x, engine.y, catalog.body,
             stage, scale, safe.left, safe.top)
         val surface = Surface(handle)
@@ -862,12 +885,17 @@ class PetOverlayService : Service(), Choreographer.FrameCallback, ModuleHost, Pe
         // and it gets the same opacity as any other clip. Drawing effects in a
         // second, untouchable window is what made them look washed out: Android
         // caps the opacity of pass-through overlays.
-        val stage = stageFor(clip)
+        val stage = stageFor(engine, clip)
         if (surface.stage != stage) {
             surface.stage = stage
             view.configure(stage, surface.scale)
         }
         view.present(frame, clip.crop, engine.facingRight)
+        // A landing gets a short squash so the jump down has weight.
+        if (surface.landings != engine.landings) {
+            surface.landings = engine.landings
+            view.squash()
+        }
         moveWindow(view, surface.params, stage, engine, surface.scale)
         sayClipLine(surface)
         positionBubble(surface)

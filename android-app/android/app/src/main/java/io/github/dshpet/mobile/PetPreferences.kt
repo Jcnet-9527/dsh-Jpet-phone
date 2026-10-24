@@ -53,6 +53,10 @@ data class PetOptions(
     val wallMinutes: Int = 4,
     /** How much of the body stays on screen while hanging: 0.25 = a peeking head, 0.65 = most of it. */
     val wallPeek: Float = DEFAULT_WALL_PEEK,
+    /** Debug/testing: 0 = the usual random 30-90 s watch, otherwise that many seconds. */
+    val wallStaySeconds: Int = 0,
+    /** Debug/testing: a [PeekAction] name to force this visit, blank = weighted random. */
+    val wallPeekAction: String = "",
 
     /** Use the DSH running on this device for chat, whispers and balance. */
     val dsh: Boolean = false,
@@ -148,6 +152,8 @@ data class PetOptions(
             shakeStrength = finite(shakeStrength, .5f).coerceIn(0f, 1f),
             wallMinutes = wallMinutes.coerceIn(1, 30),
             wallPeek = finite(wallPeek, DEFAULT_WALL_PEEK).coerceIn(.3f, .65f),
+            wallStaySeconds = wallStaySeconds.coerceIn(0, 600),
+            wallPeekAction = wallPeekAction.trim(),
             edgeAllowance = finite(edgeAllowance, DEFAULT_EDGE_ALLOWANCE)
                 .coerceIn(MIN_EDGE_ALLOWANCE, MAX_EDGE_ALLOWANCE),
             voiceTimbre = voiceTimbre.takeIf { it in TIMBRES } ?: TIMBRE_BAKER,
@@ -231,6 +237,8 @@ class PetPreferences(private val context: Context) {
         private const val KEY_WALL = "wall"
         private const val KEY_WALL_MINUTES = "wallMinutes"
         private const val KEY_WALL_PEEK = "wallPeek"
+        private const val KEY_WALL_STAY = "wallStaySeconds"
+        private const val KEY_WALL_ACTION = "wallPeekAction"
         private const val KEY_DSH = "dsh"
         private const val KEY_DSH_BASE_URL = "dshBaseUrl"
         private const val KEY_DSH_TOKEN = "dshToken"
@@ -308,6 +316,8 @@ class PetPreferences(private val context: Context) {
         wall = prefs.getBoolean(KEY_WALL, true),
         wallMinutes = prefs.getInt(KEY_WALL_MINUTES, 4).coerceIn(1, 30),
         wallPeek = prefs.getFloat(KEY_WALL_PEEK, PetOptions.DEFAULT_WALL_PEEK),
+        wallStaySeconds = prefs.getInt(KEY_WALL_STAY, 0),
+        wallPeekAction = prefs.getString(KEY_WALL_ACTION, "").orEmpty(),
         dsh = prefs.getBoolean(KEY_DSH, false),
         dshBaseUrl = prefs.getString(KEY_DSH_BASE_URL, null)?.takeIf { it.isNotBlank() }
             ?: PetOptions.DEFAULT_DSH_BASE_URL,
@@ -352,6 +362,8 @@ class PetPreferences(private val context: Context) {
             .putBoolean(KEY_WALL, normalized.wall)
             .putInt(KEY_WALL_MINUTES, normalized.wallMinutes)
             .putFloat(KEY_WALL_PEEK, normalized.wallPeek)
+            .putInt(KEY_WALL_STAY, normalized.wallStaySeconds)
+            .putString(KEY_WALL_ACTION, normalized.wallPeekAction)
             .putBoolean(KEY_DSH, normalized.dsh)
             .putString(KEY_DSH_BASE_URL, normalized.dshBaseUrl)
             .putString(KEY_DSH_TOKEN, normalized.dshToken)

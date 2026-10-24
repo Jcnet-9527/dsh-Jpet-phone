@@ -21,9 +21,9 @@
 | 文件 | 改动要点 |
 |---|---|
 | `AndroidManifest.xml` | 新增 `RECEIVE_BOOT_COMPLETED`、`REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`；注册三个 receiver |
-| `PetOverlayService.kt` | `START_STICKY`；null-intent 自动恢复；息屏不删窗口；3s 自愈；事件日志；`SHAKE_TEST`（debug）；注册 ShakeModule；`sayClipLine()`（动作台词上气泡，同句 10s 去重、间隔 1.5s）；`maybeWall()` / `enterWall()`（探头、30–90s 松手）、`WALL_TEST`/`WALL_TEST_RIGHT`（debug）、挂墙时收起语音按钮 |
-| `PetPreferences.kt` | 新增 `dsh/dshBaseUrl/dshToken`、`shake/shakeStrength`、`wall/wallMinutes/wallPeek`、`clickReply`（`ClickReply.LINE/DSH`）、`running` 标记与 `log()`；`clipLineActive()` 统一判断"这句台词此刻该不该说" |
-| `PetEngine.kt` | 新增 `tilt` / `tiltVelocity`（供摇晃渲染）；`clipStarts`（每次动画开始自增，供台词判定）；`wallSide/wallTargetY/clingToWall/leaveWall/advanceWall`（挂墙独立时钟、缓慢爬升、松手内抛） |
+| `PetOverlayService.kt` | `START_STICKY`；null-intent 自动恢复；息屏不删窗口；3s 自愈；事件日志；`SHAKE_TEST`（debug）；注册 ShakeModule；`sayClipLine()`（动作台词上气泡，同句 10s 去重、间隔 1.5s）；`maybeWall()` / `enterWall()`（走路→抓住→分步爬→探头→跳下的几何）、攀爬/探头时给窗口加 70 单位 padding（旋转不裁切）、落地 Q 弹、`WALL_TEST`/`WALL_TEST_RIGHT`（debug）、挂墙时收起语音按钮 |
+| `PetPreferences.kt` | 新增 `dsh/dshBaseUrl/dshToken`、`shake/shakeStrength`、`wall/wallMinutes/wallPeek`（另有测试用 `wallStaySeconds/wallPeekAction`）、`clickReply`（`ClickReply.LINE/DSH`）、`running` 标记与 `log()`；`clipLineActive()` 统一判断"这句台词此刻该不该说" |
+| `PetEngine.kt` | 新增 `tilt` / `tiltVelocity`（供摇晃渲染）；`clipStarts`（每次动画开始自增，供台词判定）；`wallSide/wallPhase` 完整表演状态机（走路/抓住/分步爬/停/探头/缩回/跳下）、`PeekAction` 动作池、落地计数（供 Q 弹） |
 | `PetView.kt` | `onDraw` 绕底边中点旋转 + 横移（倾斜渲染） |
 | `ChatModule.kt` / `ChatActivity.kt` / `SpeechModule.kt` | DSH 开启时改走 `DshClient`（聊天/余额/碎碎念）；`SpeechModule` 在带台词的动作播放时让路（点击仍走 DSH 时不让） |
 | `ui/ChatSection.kt` | 设置页：联动 DSH 开关 + 地址 + token |
