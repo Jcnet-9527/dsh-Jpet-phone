@@ -58,6 +58,23 @@ class PetEngine(clips: List<ClipSpec>, private val random: Random = Random.Defau
      */
     var clipStarts: Long = 0L
         private set
+
+    /**
+     * 0 = free, -1 = hanging on the left edge, +1 on the right one.
+     *
+     * A pet on the wall ignores gravity and wandering: [x] is pinned so half the
+     * body sits past the screen edge, and it climbs slowly to [wallTargetY]
+     * while the dangling clip plays. Dragging it or [leaveWall] hands it back to
+     * gravity.
+     */
+    var wallSide: Int = 0
+        private set
+
+    /** Height the hanging pet climbs towards, in source pixels. */
+    private var wallTargetY = 0.0
+
+    /** The sprite's own height, so a hanging pet stays inside the middle band. */
+    private var wallBodyHeight = 0.0
     var mode = PetMode.IDLE
         private set
     var x = 0.0
@@ -122,7 +139,8 @@ class PetEngine(clips: List<ClipSpec>, private val random: Random = Random.Defau
 
     /** A real collision hit: move, take the impulse, and let gravity take over. */
     fun nudge(dx: Double, dy: Double, dvx: Double, dvy: Double) {
-        if (paused || mode == PetMode.DRAG) return
+        // A wall pet is holding on: collisions must not knock it off.
+        if (paused || mode == PetMode.DRAG || wallSide != 0) return
         shift(dx, dy)
         if (!vx.isFinite() || !vy.isFinite() || !dvx.isFinite() || !dvy.isFinite()) return
         vx += dvx
@@ -142,7 +160,10 @@ class PetEngine(clips: List<ClipSpec>, private val random: Random = Random.Defau
         bottom = height.takeIf { it.isFinite() }?.coerceAtLeast(0.0) ?: 0.0
         this.allowX = allowX.takeIf { it.isFinite() }?.coerceAtLeast(0.0) ?: 0.0
         this.allowBottom = allowBottom.takeIf { it.isFinite() }?.coerceAtLeast(0.0) ?: 0.0
-        restorePosition(rx, ry)
+        // A hanging pet sits past the edge on purpose: resizing must not pull it
+        // back inside the screen, only re-solve its height.
+        if (wallSide != 0) y = clampY((ry.takeIf { it.isFinite() } ?: 1.0) * bottom)
+        else restorePosition(rx, ry)
         if (mode == PetMode.MOVE || mode == PetMode.TURN || mode == PetMode.DRAG) idle()
     }
 
@@ -173,6 +194,12 @@ class PetEngine(clips: List<ClipSpec>, private val random: Random = Random.Defau
         val absent = pool.filter { !check(it) }
         if (absent.isNotEmpty()) onMissing?.invoke(absent.random(random))
     }
+
+    /** Climbing pace while hanging, source px per second. */
+    private val WALL_CLIMB_SPEED = 60.0
+
+    /** Inward shove when a pet lets go, source pixels per second. */
+    private val WALL_EJECT = 260.0
 
     private fun enter(next: PetMode, animation: ClipSpec) {
         mode = next; clip = animation; elapsed = 0.0; clipStarts++
@@ -213,6 +240,73 @@ class PetEngine(clips: List<ClipSpec>, private val random: Random = Random.Defau
     fun click() { vx = 0.0; vy = 0.0; pendingMove = null; enter(PetMode.CLICK, pick("click")) }
 
     /**
+     * Pins the pet to one edge. [bodyX] is where the body's left edge should
+     * sit, in the same source units [x] uses; the caller turns the screen inset
+     * and the "only half visible" offset into those units.
+     */
+    fun clingToWall(side: Int, bodyX: Double, bodyHeight: Double = 0.0) {
+        // A pet in mid-air can still grab the wall; only a held one cannot.
+        if (mode == PetMode.DRAG) return
+        wallSide = if (side < 0) -1 else 1
+        // Face into the screen, not into the wall: on the left edge that means
+        // looking right, on the right edge looking left.
+        facingRight = wallSide < 0
+        vx = 0.0; vy = 0.0; pendingMove = null
+        if (bodyX.isFinite()) x = bodyX
+        if (bodyHeight.isFinite() && bodyHeight > 0) wallBodyHeight = bodyHeight
+        wallTargetY = nextWallY()
+        enter(PetMode.IDLE, hangClip())
+    }
+
+    /**
+     * A height that keeps the whole sprite inside the middle 18%-82% of the
+     * screen. The tall side of the band is shortened by the sprite itself, so
+     * portrait and landscape both stay clear of the floor.
+     */
+    private fun nextWallY(): Double {
+        val span = (bottom * .64 - wallBodyHeight).coerceAtLeast(0.0)
+        return clampY(bottom * .18 + random.nextDouble() * span)
+    }
+
+    /** Lets go: [fall] hands the pet back to gravity, otherwise it stays put. */
+    fun leaveWall(fall: Boolean = true) {
+        if (wallSide == 0) return
+        // Letting go of the edge throws the pet a little towards the middle:
+        // falling straight down would land it still half outside the screen.
+        val eject = if (wallSide < 0) WALL_EJECT else -WALL_EJECT
+        wallSide = 0
+        vx = if (fall) eject else 0.0; vy = 0.0
+        if (fall) enter(PetMode.THROWN, pick("drag")) else idle()
+    }
+
+    /** The dangling clip reads as "hanging by the hands"; idle is the fallback. */
+    private fun hangClip(): ClipSpec =
+        pools["drag"]?.takeIf { it.isNotEmpty() }?.let { pick("drag") } ?: pick("idle")
+
+    /**
+     * The wall's own clock: no gravity, no wandering, just a slow climb to
+     * [wallTargetY] with the dangling animation. A tap still plays once and
+     * comes back to the hang.
+     */
+    private fun advanceWall(dt: Double) {
+        elapsed += dt
+        val dy = wallTargetY - y
+        if (abs(dy) > 1.0) {
+            val pace = WALL_CLIMB_SPEED * dt
+            y = clampY(y + dy.coerceIn(-pace, pace))
+        }
+        if (mode == PetMode.CLICK) {
+            if (elapsed >= clip.duration) enter(PetMode.IDLE, hangClip())
+            return
+        }
+        if (elapsed >= clip.duration) {
+            // Half the time, look for another spot a little higher or lower.
+            if (random.nextDouble() < .5) wallTargetY = nextWallY()
+            enter(PetMode.IDLE, hangClip())
+        }
+    }
+
+    /**
      * The opening animation. The constructor takes the first idle clip blindly,
      * which only happens to be right while that clip ships inside the APK;
      * once availability is known this re-picks one the device can really play.
@@ -221,7 +315,11 @@ class PetEngine(clips: List<ClipSpec>, private val random: Random = Random.Defau
         elapsed = 0.0
         enter(PetMode.IDLE, pick("idle"))
     }
-    fun beginDrag() { vx = 0.0; vy = 0.0; pendingMove = null; enter(PetMode.DRAG, pick("drag")) }
+    fun beginDrag() {
+        // Grabbing a pet on the wall peels it off immediately.
+        wallSide = 0
+        vx = 0.0; vy = 0.0; pendingMove = null; enter(PetMode.DRAG, pick("drag"))
+    }
     fun cancelDrag() { if (mode == PetMode.DRAG) idle() }
     fun dragTo(bodyX: Double, bodyY: Double) {
         if (mode != PetMode.DRAG) return
@@ -242,6 +340,7 @@ class PetEngine(clips: List<ClipSpec>, private val random: Random = Random.Defau
     fun advance(seconds: Double) {
         if (paused || !seconds.isFinite() || seconds <= 0) return
         val dt = min(seconds, .05)
+        if (wallSide != 0) { advanceWall(dt); return }
         elapsed += dt
         when (mode) {
             PetMode.DRAG -> elapsed %= clip.duration
@@ -277,7 +376,7 @@ class PetEngine(clips: List<ClipSpec>, private val random: Random = Random.Defau
                 } else idle()
             }
             PetMode.IDLE -> if (elapsed >= clip.duration) {
-                if (!wander || right == 0.0 || random.nextDouble() < .6) idle()
+                if (wallSide != 0 || !wander || right == 0.0 || random.nextDouble() < .6) idle()
                 else {
                     val animation = pick("move")
                     val direction = if (x < right * .2) 1 else if (x > right * .8) -1 else if (random.nextBoolean()) 1 else -1

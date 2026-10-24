@@ -47,6 +47,13 @@ data class PetOptions(
     val shake: Boolean = true,
     val shakeStrength: Float = .5f,
 
+    /** Now and then the pet hangs on one edge, half hidden, instead of the floor. */
+    val wall: Boolean = true,
+    /** Minutes between two visits to an edge. */
+    val wallMinutes: Int = 4,
+    /** How much of the body stays on screen while hanging: 0.25 = a peeking head, 0.65 = most of it. */
+    val wallPeek: Float = DEFAULT_WALL_PEEK,
+
     /** Use the DSH running on this device for chat, whispers and balance. */
     val dsh: Boolean = false,
     val dshBaseUrl: String = DEFAULT_DSH_BASE_URL,
@@ -72,6 +79,7 @@ data class PetOptions(
         const val DEFAULT_SPEECH_SECONDS = 3.2f
         /** The animation group the five tap responses belong to. */
         const val CLICK_GROUP = "click"
+        const val DEFAULT_WALL_PEEK = .45f
         const val MIN_SECONDS = 5f
         const val MAX_SECONDS = 600f
         const val MIN_SPEECH_SECONDS = 1f
@@ -138,6 +146,8 @@ data class PetOptions(
                 .coerceIn(0f, 1f),
             chatMemory = chatMemory.coerceIn(MIN_CHAT_MEMORY, MAX_CHAT_MEMORY),
             shakeStrength = finite(shakeStrength, .5f).coerceIn(0f, 1f),
+            wallMinutes = wallMinutes.coerceIn(1, 30),
+            wallPeek = finite(wallPeek, DEFAULT_WALL_PEEK).coerceIn(.3f, .65f),
             edgeAllowance = finite(edgeAllowance, DEFAULT_EDGE_ALLOWANCE)
                 .coerceIn(MIN_EDGE_ALLOWANCE, MAX_EDGE_ALLOWANCE),
             voiceTimbre = voiceTimbre.takeIf { it in TIMBRES } ?: TIMBRE_BAKER,
@@ -218,6 +228,9 @@ class PetPreferences(private val context: Context) {
         private const val KEY_TOUCH_THROUGH = "touchThrough"
         private const val KEY_SHAKE = "shake"
         private const val KEY_SHAKE_STRENGTH = "shakeStrength"
+        private const val KEY_WALL = "wall"
+        private const val KEY_WALL_MINUTES = "wallMinutes"
+        private const val KEY_WALL_PEEK = "wallPeek"
         private const val KEY_DSH = "dsh"
         private const val KEY_DSH_BASE_URL = "dshBaseUrl"
         private const val KEY_DSH_TOKEN = "dshToken"
@@ -235,7 +248,7 @@ class PetPreferences(private val context: Context) {
             KEY_SPEECH_MAX, KEY_SPEECH_SECONDS, KEY_CLICK_REPLY, KEY_CLICK_SOUND, KEY_CLICK_VOLUME, KEY_CLICK_URI,
             KEY_COMPANIONS, KEY_COLLISION, KEY_COLLISION_RESTITUTION, KEY_CHAT, KEY_CHAT_BASE_URL,
             KEY_CHAT_API_KEY, KEY_CHAT_MODEL, KEY_CHAT_SYSTEM, KEY_CHAT_MEMORY, KEY_CHAT_BALANCE,
-            KEY_PACK_AUTO, KEY_PACK_BASE_URL, KEY_EDGE_ALLOWANCE,
+            KEY_PACK_AUTO, KEY_PACK_BASE_URL, KEY_EDGE_ALLOWANCE, KEY_WALL, KEY_WALL_MINUTES, KEY_WALL_PEEK,
             KEY_VOICE_CHAT, KEY_VOICE_SPEAK, KEY_VOICE_TIMBRE, KEY_VOICE_SPEED)
     }
 
@@ -292,6 +305,9 @@ class PetPreferences(private val context: Context) {
         touchThrough = prefs.getBoolean(KEY_TOUCH_THROUGH, false),
         shake = prefs.getBoolean(KEY_SHAKE, true),
         shakeStrength = prefs.getFloat(KEY_SHAKE_STRENGTH, .5f),
+        wall = prefs.getBoolean(KEY_WALL, true),
+        wallMinutes = prefs.getInt(KEY_WALL_MINUTES, 4).coerceIn(1, 30),
+        wallPeek = prefs.getFloat(KEY_WALL_PEEK, PetOptions.DEFAULT_WALL_PEEK),
         dsh = prefs.getBoolean(KEY_DSH, false),
         dshBaseUrl = prefs.getString(KEY_DSH_BASE_URL, null)?.takeIf { it.isNotBlank() }
             ?: PetOptions.DEFAULT_DSH_BASE_URL,
@@ -333,6 +349,9 @@ class PetPreferences(private val context: Context) {
             .putBoolean(KEY_TOUCH_THROUGH, normalized.touchThrough)
             .putBoolean(KEY_SHAKE, normalized.shake)
             .putFloat(KEY_SHAKE_STRENGTH, normalized.shakeStrength)
+            .putBoolean(KEY_WALL, normalized.wall)
+            .putInt(KEY_WALL_MINUTES, normalized.wallMinutes)
+            .putFloat(KEY_WALL_PEEK, normalized.wallPeek)
             .putBoolean(KEY_DSH, normalized.dsh)
             .putString(KEY_DSH_BASE_URL, normalized.dshBaseUrl)
             .putString(KEY_DSH_TOKEN, normalized.dshToken)

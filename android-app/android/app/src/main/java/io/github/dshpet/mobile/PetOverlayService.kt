@@ -78,6 +78,10 @@ class PetOverlayService : Service(), Choreographer.FrameCallback, ModuleHost, Pe
         const val EXIT = "pet.EXIT"
         /** Debug-only: pretend the phone was shaken (release builds ignore it). */
         const val SHAKE_TEST = "pet.SHAKE_TEST"
+        /** Debug-only: make the main pet cling to the left edge. */
+        const val WALL_TEST = "pet.WALL_TEST"
+        /** Debug-only: the same, on the right edge. */
+        const val WALL_TEST_RIGHT = "pet.WALL_TEST_RIGHT"
         private const val CHANNEL = "pet-running"
         private const val TAG = "PetOverlay"
 
@@ -116,6 +120,10 @@ class PetOverlayService : Service(), Choreographer.FrameCallback, ModuleHost, Pe
 
         /** The same sentence twice inside this window is a repeat, not a line. */
         private const val CLIP_LINE_REPEAT_MS = 10_000L
+
+        /** How long a hang lasts: 30 s to 90 s. */
+        private const val WALL_STAY_MIN_MS = 30_000L
+        private const val WALL_STAY_MAX_MS = 90_000L
 
         fun command(context: Context, action: String) {
             try {
@@ -230,6 +238,8 @@ class PetOverlayService : Service(), Choreographer.FrameCallback, ModuleHost, Pe
                     (registry?.instance(ModuleIds.SHAKE) as? ShakeModule)?.simulateShake()
                 }, 1800)
             }
+            WALL_TEST -> if (BuildConfig.DEBUG) wallTest(-1)
+            WALL_TEST_RIGHT -> if (BuildConfig.DEBUG) wallTest(1)
             PAUSE -> if (started) { userPaused = true; updateVisibility(); updateNotification() }
             RESUME -> if (started) { userPaused = false; updateVisibility(); updateNotification() }
             RESET -> if (started) {
@@ -428,6 +438,105 @@ class PetOverlayService : Service(), Choreographer.FrameCallback, ModuleHost, Pe
      * the transparent margin were swallowed instead of reaching the app below.
      */
     private fun stageFor(clip: ClipSpec): SourceBox = clip.crop
+
+    /**
+     * When the pet next goes to hang on an edge, and when it should let go.
+     *
+     * The feature is deliberately unhurried: the interval is minutes, the stay
+     * half a minute to a minute and a half. A pet that vanished to the edge
+     * every twenty seconds would be a nuisance, not companionship.
+     */
+    private var wallNextAt = 0L
+    private var wallLeaveAt = 0L
+    /** Whether the previous tick saw the pet on an edge, to reschedule on any departure. */
+    private var wallWasOn = false
+
+    private fun wallIntervalMs(): Long {
+        val minutes = settings.wallMinutes.coerceIn(1, 30)
+        // ±25% jitter so it never feels like a timer.
+        val jitter = 0.75 + Math.random() * 0.5
+        return (minutes * 60_000.0 * jitter).toLong()
+    }
+
+    /** Runs on the frame loop; cheap enough to check every tick. */
+    private fun maybeWall() {
+        if (!started || userPaused) return
+        val handle = petMap[0] ?: return
+        val engine = handle.engine
+        val now = SystemClock.elapsedRealtime()
+        if (engine.wallSide != 0) {
+            wallWasOn = true
+            // Turning the switch off (or shortening the stay) must not leave the
+            // pet stranded past the edge, so the wall clock keeps running.
+            if (now >= wallLeaveAt || !settings.wall) {
+                engine.leaveWall(fall = true)
+                wallWasOn = false
+                wallNextAt = now + wallIntervalMs()
+                preferences.log("wall: let go")
+            }
+            return
+        }
+        if (wallWasOn) {
+            // Pulled off by the user before the clock ran out: wait a full
+            // interval before going back, or dragging it off would look like a
+            // pet that immediately re-attaches.
+            wallWasOn = false
+            wallNextAt = now + wallIntervalMs()
+        }
+        if (!settings.wall) return
+        if (engine.mode == PetMode.DRAG || engine.mode == PetMode.THROWN) return
+        // The first visit waits a full interval too: a pet that darts off to the
+        // edge twenty seconds after every restart feels like a glitch, not a habit.
+        if (wallNextAt == 0L) { wallNextAt = now + wallIntervalMs(); return }
+        if (now >= wallNextAt) enterWall(if (Math.random() < .5) -1 else 1)
+    }
+
+    /** Debug hook behind the two WALL_TEST intents. */
+    private fun wallTest(side: Int) {
+        preferences.log("debug: wall test side=$side started=$started")
+        if (!started) startPet()
+        handler.postDelayed({
+            val engine = petMap[0]?.engine
+            if (engine != null && engine.wallSide != 0) engine.leaveWall(fall = true)
+            else enterWall(side)
+        }, 1200)
+    }
+
+    /**
+     * Pins the pet to one edge with only [WALL_PEEK] of its body on screen.
+     *
+     * The window is still the clip's crop, so a negative x simply lets the
+     * system clip the part that hangs over the edge - no window maths changes.
+     * The pet then climbs to a random height by itself.
+     */
+    private fun enterWall(side: Int) {
+        val handle = petMap[0] ?: return
+        val engine = handle.engine
+        if (engine.mode == PetMode.DRAG) return
+        val scale = scaleOf(handle)
+        if (!scale.isFinite() || scale <= .1) return
+        val body = catalog.body
+        // The slider's share of the body stays inside the screen: the rest hangs
+        // past the edge and is clipped by the system. No inset here - a gap on
+        // the clipped side would simply reveal more of the pet.
+        val peek = settings.wallPeek.toDouble().coerceIn(.3, .65)
+        val x = if (side < 0) {
+            safe.left / scale - body.width * (1.0 - peek)
+        } else {
+            safe.right / scale - body.width * peek
+        }
+        engine.clingToWall(side, bodyX = x, bodyHeight = body.height)
+        // A wall pet that is dragged off must not jump straight back on: the
+        // next visit is scheduled from this cling, not from the last let-go.
+        wallNextAt = SystemClock.elapsedRealtime() + wallIntervalMs()
+        // The hold-to-talk button follows the pet and would hang half off the
+        // screen; the menu reopens it. Bubbles still work while hanging.
+        hideVoiceButton()
+        val stay = WALL_STAY_MIN_MS +
+            (Math.random() * (WALL_STAY_MAX_MS - WALL_STAY_MIN_MS)).toLong()
+        wallLeaveAt = SystemClock.elapsedRealtime() + stay
+        preferences.log("wall: cling side=$side x=$x y=${engine.y}")
+    }
 
     private fun attach(handle: PetHandle): Boolean {
         if (surfaces.containsKey(handle.id)) return true
@@ -728,6 +837,7 @@ class PetOverlayService : Service(), Choreographer.FrameCallback, ModuleHost, Pe
             lastFrameNanos = frameTimeNanos
             // Collisions settle on the pre-integration snapshot, like the desktop.
             registry?.onTick(elapsed)
+            maybeWall()
             for (surface in surfaces.values.toList()) {
                 surface.handle.engine.advance(elapsed)
                 render(surface)

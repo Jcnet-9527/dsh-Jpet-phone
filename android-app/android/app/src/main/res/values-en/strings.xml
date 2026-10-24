@@ -21,6 +21,11 @@
     <string name="percent_value">%1$d%%</string>
     <string name="interaction">Interaction</string>
     <string name="wander">Wander around</string>
+    <string name="wall">Hang on the edges</string>
+    <string name="wall_interval">How often</string>
+    <string name="wall_minutes">%1$d min</string>
+    <string name="wall_peek">How much shows</string>
+    <string name="wall_hint">When its time comes, the pet climbs up the left or right edge and hangs there with only its head and one hand showing, then lets go and drops back to the floor. Pull the slider right if you want to see more; dragging it counts as letting go.</string>
     <string name="speech">Speech bubbles</string>
     <string name="reset">Restore defaults</string>
     <string name="reset_message">Restore size, lines, sound and interaction settings, remove every baby whale, and move the pet to the bottom of the screen.</string>

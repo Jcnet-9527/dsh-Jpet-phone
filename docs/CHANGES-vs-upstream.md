@@ -9,6 +9,8 @@
 | `android-app/android/app/src/main/java/io/github/dshpet/mobile/DshClient.kt` | 与 DSH 宿主通信：token→cookie，`chat` / `whisper` / `state(余额)` |
 | `.../modules/ShakeModule.kt` | 加速度计摇晃检测 + 弹簧倾斜 + 冲量 + 传感器生命周期 |
 | `.../ui/ShakeSection.kt` | 设置页「摇晃互动」开关与强度滑杆 |
+| `.../ui/WallSection.kt` | 设置页「扒在两侧」开关、「多久去一次」滑杆（1–15 分钟）、「露出多少」滑杆（30%–65%） |
+| `android-app/scripts/bump_dsh_version.py` | 构建前把 versionCode/versionName 同步 +1，避免安装器拒绝同版本覆盖 |
 | `.../WatchdogReceiver.kt` | AlarmManager 看门狗（进程被杀也能在亮屏时恢复） |
 | `.../ScreenWakeReceiver.kt` | 清单注册的亮屏/解锁接收器（尽力而为） |
 | `.../BootReceiver.kt` | 开机自启（仅当用户未手动停止） |
@@ -19,15 +21,15 @@
 | 文件 | 改动要点 |
 |---|---|
 | `AndroidManifest.xml` | 新增 `RECEIVE_BOOT_COMPLETED`、`REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`；注册三个 receiver |
-| `PetOverlayService.kt` | `START_STICKY`；null-intent 自动恢复；息屏不删窗口；3s 自愈；事件日志；`SHAKE_TEST`（debug）；注册 ShakeModule；`sayClipLine()`（动作台词上气泡，同句 10s 去重、间隔 1.5s） |
-| `PetPreferences.kt` | 新增 `dsh/dshBaseUrl/dshToken`、`shake/shakeStrength`、`clickReply`（`ClickReply.LINE/DSH`）、`running` 标记与 `log()`；`clipLineActive()` 统一判断"这句台词此刻该不该说" |
-| `PetEngine.kt` | 新增 `tilt` / `tiltVelocity`（供摇晃渲染）；`clipStarts`（每次动画开始自增，供台词判定） |
+| `PetOverlayService.kt` | `START_STICKY`；null-intent 自动恢复；息屏不删窗口；3s 自愈；事件日志；`SHAKE_TEST`（debug）；注册 ShakeModule；`sayClipLine()`（动作台词上气泡，同句 10s 去重、间隔 1.5s）；`maybeWall()` / `enterWall()`（探头、30–90s 松手）、`WALL_TEST`/`WALL_TEST_RIGHT`（debug）、挂墙时收起语音按钮 |
+| `PetPreferences.kt` | 新增 `dsh/dshBaseUrl/dshToken`、`shake/shakeStrength`、`wall/wallMinutes/wallPeek`、`clickReply`（`ClickReply.LINE/DSH`）、`running` 标记与 `log()`；`clipLineActive()` 统一判断"这句台词此刻该不该说" |
+| `PetEngine.kt` | 新增 `tilt` / `tiltVelocity`（供摇晃渲染）；`clipStarts`（每次动画开始自增，供台词判定）；`wallSide/wallTargetY/clingToWall/leaveWall/advanceWall`（挂墙独立时钟、缓慢爬升、松手内抛） |
 | `PetView.kt` | `onDraw` 绕底边中点旋转 + 横移（倾斜渲染） |
 | `ChatModule.kt` / `ChatActivity.kt` / `SpeechModule.kt` | DSH 开启时改走 `DshClient`（聊天/余额/碎碎念）；`SpeechModule` 在带台词的动作播放时让路（点击仍走 DSH 时不让） |
 | `ui/ChatSection.kt` | 设置页：联动 DSH 开关 + 地址 + token |
-| `MainActivity.kt` | 「允许后台常驻」按钮；`shakeTest` 调试钩子；引入 ShakeSection；把 `lineCount` 传给语音设置 |
+| `MainActivity.kt` | 「允许后台常驻」按钮；`shakeTest`/`wallTest`/`wallTestRight` 调试钩子；引入 ShakeSection、WallSection；把 `lineCount` 传给语音设置 |
 | `ModuleIds.kt` | 新增 `SHAKE` |
-| `res/values/strings.xml` / `values-en` | 中英文案：DSH 联动、摇晃互动、后台常驻、点击回应开关、台词提示 |
+| `res/values/strings.xml` / `values-en` | 中英文案：DSH 联动、摇晃互动、扒在两侧、后台常驻、点击回应开关、台词提示 |
 | `app/build.gradle.kts` | compileSdk/targetSdk 34、buildTools 29.0.3、依赖降级、applicationId `.dsh`、版本号 |
 | `android/gradle.properties` | `android.aapt2FromMavenOverride=/usr/bin/aapt2` |
 | `scripts/fetch_character_videos.py` | 中文文件名 URL 编码修复 |

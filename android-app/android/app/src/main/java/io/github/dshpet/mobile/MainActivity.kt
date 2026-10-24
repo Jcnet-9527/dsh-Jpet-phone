@@ -72,6 +72,7 @@ import io.github.dshpet.mobile.ui.CompanionSection
 import io.github.dshpet.mobile.ui.SectionTitle
 import io.github.dshpet.mobile.ui.ShakeSection
 import io.github.dshpet.mobile.ui.TouchSection
+import io.github.dshpet.mobile.ui.WallSection
 import io.github.dshpet.mobile.ui.SpeechSection
 import io.github.dshpet.mobile.ui.VoiceSection
 import io.github.dshpet.mobile.ui.WanderSection
@@ -108,6 +109,12 @@ class MainActivity : ComponentActivity() {
         if (BuildConfig.DEBUG && intent?.getBooleanExtra("shakeTest", false) == true) {
             PetOverlayService.command(this, PetOverlayService.SHAKE_TEST)
         }
+        if (BuildConfig.DEBUG && intent?.getBooleanExtra("wallTest", false) == true) {
+            PetOverlayService.command(this, PetOverlayService.WALL_TEST)
+        }
+        if (BuildConfig.DEBUG && intent?.getBooleanExtra("wallTestRight", false) == true) {
+            PetOverlayService.command(this, PetOverlayService.WALL_TEST_RIGHT)
+        }
         setContent { PetSettings() }
     }
 
@@ -116,6 +123,12 @@ class MainActivity : ComponentActivity() {
         if (intent.getBooleanExtra(EXTRA_VOICE_PERMISSION, false)) askMicOnResume = true
         if (BuildConfig.DEBUG && intent.getBooleanExtra("shakeTest", false)) {
             PetOverlayService.command(this, PetOverlayService.SHAKE_TEST)
+        }
+        if (BuildConfig.DEBUG && intent.getBooleanExtra("wallTest", false)) {
+            PetOverlayService.command(this, PetOverlayService.WALL_TEST)
+        }
+        if (BuildConfig.DEBUG && intent.getBooleanExtra("wallTestRight", false)) {
+            PetOverlayService.command(this, PetOverlayService.WALL_TEST_RIGHT)
         }
     }
 
@@ -272,6 +285,7 @@ class MainActivity : ComponentActivity() {
                     SectionTitle(R.string.interaction)
                     WanderSection(options) { save(it) }
                     ShakeSection(options) { save(it) }
+                    WallSection(options) { save(it) }
                     TouchSection(options) { save(it) }
                     SpeechSection(options, builtinCount, lineCount) { save(it) }
                     ClickSoundSection(options, audioName, { save(it) },

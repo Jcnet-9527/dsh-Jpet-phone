@@ -157,6 +157,11 @@
     <string name="dsh_token_hint">重启 DSH 后会变，需重新粘贴</string>
     <string name="allow_background">允许后台常驻（息屏后不消失）</string>
     <string name="shake">摇晃互动（摇手机时桌宠会晃）</string>
+    <string name="wall">扒在两侧（隔一会儿挂到屏幕边缘）</string>
+    <string name="wall_interval">多久去一次</string>
+    <string name="wall_minutes">%1$d 分钟</string>
+    <string name="wall_peek">露出多少</string>
+    <string name="wall_hint">到时间后桌宠会从底部爬到屏幕左或右侧，只露出脑袋和一只手挂一会儿，然后松手掉回桌面。觉得露太少就把上面的滑杆往右拉；拖动它就当没挂住。</string>
     <string name="shake_strength">摇晃强度</string>
     <string name="touch_through">点击穿透（不再挡住其他 App 的点击）</string>
     <string name="touch_through_hint">开启后桌宠照常动，但不能再拖动或点击它。</string>
