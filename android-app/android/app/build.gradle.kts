@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -6,14 +8,35 @@ plugins {
 
 android {
     namespace = "io.github.dshpet.mobile"
+
+    // Release signing comes from android/keystore.properties (never committed).
+    // Without that file the release APK stays unsigned and the debug build is
+    // unaffected.
+    signingConfigs {
+        val propsFile = rootProject.file("keystore.properties")
+        if (propsFile.exists()) {
+            create("release") {
+                val props = Properties().apply { propsFile.inputStream().use { load(it) } }
+                storeFile = file(props.getProperty("storeFile"))
+                storePassword = props.getProperty("storePassword")
+                keyAlias = props.getProperty("keyAlias")
+                keyPassword = props.getProperty("keyPassword")
+            }
+        }
+    }
+    buildTypes {
+        getByName("release") {
+            signingConfigs.findByName("release")?.let { signingConfig = it }
+        }
+    }
     compileSdk = 34
     buildToolsVersion = "29.0.3"
     defaultConfig {
         applicationId = "io.github.dshpet.mobile.dsh"
         minSdk = 26
         targetSdk = 34
-        versionCode = 41
-        versionName = "0.6.3-dsh.41"
+        versionCode = 42
+        versionName = "0.6.3-dsh.42"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // The voice runtime (sherpa-onnx) ships one .so per ABI; real phones
         // are all ARM, so the emulator ABIs stay out and the APK stays small.
