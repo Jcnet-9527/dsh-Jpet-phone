@@ -19,6 +19,9 @@ class SpeechModule(private val random: Random = Random.Default) : HostBoundModul
 
     override fun onFrame(pet: PetHandle, dt: Double) {
         if (pet.isCompanion || pet.engine.paused) return
+        // The current animation may be saying its own line right now; two
+        // bubbles fighting for the same corner is worse than silence.
+        if (host.options.clipLineActive(pet.engine.clip)) return
         val pool = host.effectivePhrases()
         if (pool.isEmpty()) return
         val now = host.now()
@@ -30,6 +33,11 @@ class SpeechModule(private val random: Random = Random.Default) : HostBoundModul
 
     override fun onEvent(event: PetEvent) {
         if (event !is PetEvent.Clicked || event.pet.isCompanion) return
+        // A tap animation that owns its line says it itself (the service shows
+        // it as the clip starts), so the pool must not talk over it. With
+        // ClickReply.DSH the tap clips have no speaking line and this falls
+        // through to the whisper below, which is the whole point of that mode.
+        if (host.options.clipLineActive(event.pet.engine.clip)) return
         speak(event.pet, host.effectivePhrases())
     }
 

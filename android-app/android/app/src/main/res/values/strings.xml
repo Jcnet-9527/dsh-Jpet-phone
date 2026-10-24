@@ -37,7 +37,9 @@
     <string name="speech_phrases_hint">每行一条台词</string>
     <string name="speech_save">保存台词</string>
     <string name="speech_clear">清空（用内置）</string>
-    <string name="speech_builtin_hint">留空时使用内置 %1$d 条台词。</string>
+    <string name="speech_builtin_hint">留空时使用内置 %1$d 条台词；另有 %2$d 个动作自带台词，播放时会自己开口。</string>
+    <string name="speech_click_line">点它时说预设台词</string>
+    <string name="speech_click_line_hint">打开：点击回应秒出动画自带的那句话，语音模式会一起读出来。关闭：交给 DSH 生成一句（要联网、每次不同；没开 DSH 联动时自动退回台词池）。</string>
     <string name="speech_interval_min">最短间隔</string>
     <string name="speech_interval_max">最长间隔</string>
     <string name="speech_duration">气泡停留</string>

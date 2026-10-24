@@ -1,13 +1,14 @@
 # DSH 桌宠 · 安卓悬浮版（定制分支）
 
-本仓库基于 [Jcnet-9527/dsh-Jpet-phone](https://github.com/Jcnet-9527/dsh-Jpet-phone) **v0.6.2**（上游 commit `8e39347`）定制，遵循上游 **MIT** 许可。
+本仓库基于 [Jcnet-9527/dsh-Jpet-phone](https://github.com/Jcnet-9527/dsh-Jpet-phone) **v0.6.3**（上游 commit `5dca11b`）定制，遵循上游 **MIT** 许可。
 
-目标：在保留上游全部桌宠表现（动画、物理、音效、语音、多宠）的前提下，补上三件事——
-**与 DSH 深度联动**、**息屏/开机后自动恢复**、**摇晃互动**，并让整条构建链能在 **ARM64 Linux（如 Termux/proot）** 上跑通。
+目标：在保留上游全部桌宠表现（动画、物理、音效、语音、多宠）的前提下，补上四件事——
+**与 DSH 深度联动**、**息屏/开机后自动恢复**、**摇晃互动**、**动作台词与点击回应开关**，
+并让整条构建链能在 **ARM64 Linux（如 Termux/proot）** 上跑通。
 
 ---
 
-## 一、与上游的差异（6 组）
+## 一、与上游的差异（7 组）
 
 ### 1. 与 DSH 深度联动：余额 / 碎碎念 / 聊天
 - 新增 `DshClient.kt`：用 DSH 启动 token 换 cookie，调用 dsh-pet 宿主暴露的 HTTP 路由
@@ -40,7 +41,19 @@
   - 仅在亮屏解锁时注册传感器，息屏/暂停自动注销
 - `PetPreferences` 新增 `shake / shakeStrength`；设置页新增「摇晃互动」开关与强度滑杆（`ui/ShakeSection.kt`）
 
-### 4. 构建链适配 ARM64 Linux / 老 aapt2
+### 4. 动作台词 + 点击回应开关（上游 0.6.3 的「台词跟着动作走」）
+- 素材清单新增 `line` 字段：`assets/characters/shenshen/videos/clip_lines.json` 给 10 个动作各配一句台词，
+  `export_android_assets.py` 按「精确名 → `-后缀` → 包含」三级匹配写进每个 clip；台词是**「深深」口吻**（上游原文是「本鱼」）
+- `PetEngine.clipStarts`：每次动画开始自增，服务据此判断"这一段要不要开口"（重播同一段也算一次）
+- `PetOverlayService.sayClipLine()`：动作一开就上气泡；同句 10 秒内不重复、两条台词间隔 1.5 秒以上、时长按字数夹 3–8 秒
+- **与上游不同：内置 5 句台词池保留**（上游 0.6.3 把它删空了）。DSH 碎碎念和用户自定义台词都靠这个池子；
+  带台词的动作播放时池子自动让路，空闲动作照旧可能碎碎念
+- 设置页新增「点它时说预设台词」开关（`PetOptions.clickReply`，默认开）：
+  - 开：点击回应秒出动画自带的那句话，语音模式一起朗读
+  - 关：交给 DSH 生成（`DshClient.whisper`），每次不同；没开 DSH 或请求失败时退回台词池
+- 余额显示同步上游 0.6.3 修复（`balance_infos` 是数组，旧代码按对象读，永远显示"没给出数字"）
+
+### 5. 构建链适配 ARM64 Linux / 老 aapt2
 上游默认要求 `compileSdk 36`，而 aarch64 可用的 aapt2（Debian 2.19）读不了 API 35/36 的资源表：
 - `app/build.gradle.kts`：`compileSdk/targetSdk` 34、依赖降到 compileSdk 34 可用的版本
   （Compose BOM 2024.06.00、activity-compose 1.9.0、core-ktx 1.13.1、coroutines 1.8.1）
@@ -50,11 +63,11 @@
 
 > 若你在 x86_64 主机构建，可把 `compileSdk` 调回 36 并移除 aapt2 override。
 
-### 5. 版本号与包名
+### 6. 版本号与包名
 - `applicationId` 改为 `io.github.dshpet.mobile.dsh`，可与上游正式版**并存安装**
-- `versionName` 采用 `0.6.2-dsh.N`、`versionCode` 递增，避免每次安装提示"已安装相同版本"
+- `versionName` 采用 `0.6.3-dsh.N`、`versionCode` 递增，避免每次安装提示"已安装相同版本"
 
-### 6. 调试钩子（仅 debug 构建）
+### 7. 调试钩子（仅 debug 构建）
 - `pet.SHAKE_TEST` 动作 + `MainActivity --ez shakeTest true`：注入一次模拟摇晃，便于自动化验证
 - `files/pet-events.log`：息屏/亮屏/自愈/看门狗/注入等事件留痕，用于排查"桌宠不见了"
 - 以上均由 `BuildConfig.DEBUG` 保护，**release 包不生效**
@@ -73,7 +86,7 @@ cd android
 ./gradlew :app:assembleDebug -PpetPython=python3
 ```
 
-本仓库当前为 **ARM64 Linux** 适配的配置（见差异 4），我这边实际使用的流程：
+本仓库当前为 **ARM64 Linux** 适配的配置（见差异 5），我这边实际使用的流程：
 
 ```bash
 cd android-app
@@ -101,6 +114,8 @@ cd android
 | `0.6.2-dsh.13` | 摇晃互动首版（加速度计 + 弹簧倾斜 + 冲量 + 设置项） |
 | `0.6.2-dsh.14` ~ `.17` | 摇晃注入/调试钩子、版本号自增机制、传感器接线验证 |
 | `0.6.2-dsh.18` | 摇晃手感调优：阈值 3.4→2.0、倾斜增益 0.55→1.05、冲量 90+260s→160+560s |
+| `0.6.2-dsh.19` | 窗口跟随当前动画包围盒，不再吞掉其他 App 的点击；新增「点击穿透」开关 |
+| `0.6.3-dsh.20` | 合并上游 0.6.3：动作台词（10 句「深深」口吻）+ 点击回应开关 + 余额修复；内置台词池保留 |
 
 详细文件级改动见 [`docs/CHANGES-vs-upstream.md`](docs/CHANGES-vs-upstream.md)。
 
@@ -109,4 +124,7 @@ cd android
 ## 四、许可与上游
 
 - 本仓库继承上游 **MIT**；请保留 `LICENSE`、`android-app/LICENSE-APACHE-2.0.txt`、`android-app/NOTICE.txt`、`android-app/THIRD_PARTY_NOTICES.md`。
-- 上游仍有更新（0.6.3 起新增更新检测 / 动作台词 / 小鲸鱼人设 / 余额修复），合并时注意本仓库差异 4 的构建配置会被覆盖。
+- 上游 0.6.3 的**动作台词**与**余额修复**已合并进本仓库；**内置更新检测**与**小鲸鱼人设**按计划不采用
+  （更新检测硬编码上游仓库、且我们的版本号形如 `0.6.3-dsh.N`，照搬会一直误报新版本；人设保留「深深」）。
+  `UpdateChecker.kt` 目前是未接线的死代码，留待以后接我们自己的 release 通道。
+- 合并上游时注意本仓库差异 5 的构建配置（compileSdk/aapt2 override）会被覆盖。

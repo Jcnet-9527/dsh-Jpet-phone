@@ -19,20 +19,32 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
+import io.github.dshpet.mobile.ClickReply
 import io.github.dshpet.mobile.PetOptions
 import io.github.dshpet.mobile.PhraseBook
 import io.github.dshpet.mobile.R
 
 /**
- * The speech module: the bubble switch, the user's line pool and the schedule.
- * The pool commits on finish (save button or leaving the field). An empty pool
- * is no longer "use the built-in lines" - there are none: the pet speaks when an
- * animation that carries a line plays, and [lineCount] says how many do.
+ * The speech module: the bubble switch, who answers a tap, the user's line pool
+ * and the schedule.
+ *
+ * The pool is still what the pet says when nothing else speaks: the catalog's
+ * built-in lines ([builtinCount]) plus anything the user typed. On top of that
+ * the animation list carries one line per action ([lineCount] of them), and a
+ * clip that has one says it as it starts - [PetOptions.clickReply] only decides
+ * whether a *tap* is answered by its clip or by the DSH whisper.
  */
 @Composable
-fun SpeechSection(options: PetOptions, lineCount: Int, onChanged: (PetOptions) -> Unit) {
+fun SpeechSection(options: PetOptions, builtinCount: Int, lineCount: Int,
+                  onChanged: (PetOptions) -> Unit) {
     SettingSwitch(R.string.speech, options.speech) { onChanged(options.copy(speech = it)) }
     if (options.speech) {
+        SettingSwitch(R.string.speech_click_line,
+            options.clickReply == ClickReply.LINE) {
+            onChanged(options.copy(clickReply = if (it) ClickReply.LINE else ClickReply.DSH))
+        }
+        Text(stringResource(R.string.speech_click_line_hint))
+        HorizontalDivider()
         val savedText = PhraseBook.asText(options.phrases)
         var draft by remember(options.phrases) { mutableStateOf(savedText) }
         val commit = { onChanged(options.copy(phrases = PhraseBook.fromText(draft))) }
@@ -55,7 +67,7 @@ fun SpeechSection(options: PetOptions, lineCount: Int, onChanged: (PetOptions) -
                 onChanged(options.copy(phrases = emptyList()))
             }) { Text(stringResource(R.string.speech_clear)) }
         }
-        Text(stringResource(R.string.speech_builtin_hint, lineCount))
+        Text(stringResource(R.string.speech_builtin_hint, builtinCount, lineCount))
         HorizontalDivider()
         var minDraft by remember(options.speechMinSeconds) { mutableStateOf(options.speechMinSeconds) }
         var maxDraft by remember(options.speechMaxSeconds) { mutableStateOf(options.speechMaxSeconds) }

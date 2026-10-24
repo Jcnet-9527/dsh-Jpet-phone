@@ -9,12 +9,13 @@ import org.junit.Test
 class PetOptionsTest {
     @Test
     fun eachModuleReadsItsSingleEnableBit() {
+        // shake is our fork's sixth module; the upstream test predates it.
         val off = PetOptions(wander = false, speech = false, clickSound = false, companions = false,
-            collision = false)
+            collision = false, shake = false)
         ModuleIds.ALL.forEach { assertFalse(it, off.enables(it)) }
         assertFalse(off.enables("no-such-module"))
         val on = PetOptions(wander = true, speech = true, clickSound = true, companions = true,
-            collision = true, chat = true)
+            collision = true, shake = true, chat = true)
         ModuleIds.ALL.forEach { assertTrue(it, on.enables(it)) }
     }
 

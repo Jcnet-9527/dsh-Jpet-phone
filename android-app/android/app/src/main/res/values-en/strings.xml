@@ -37,7 +37,9 @@
     <string name="speech_phrases_hint">One line per row</string>
     <string name="speech_save">Save lines</string>
     <string name="speech_clear">Clear (use built-ins)</string>
-    <string name="speech_builtin_hint">Empty means the pet stays quiet; the %1$d animations that carry a line say it when they play.</string>
+    <string name="speech_builtin_hint">Empty falls back to the %1$d built-in lines; %2$d animations also carry a line of their own.</string>
+    <string name="speech_click_line">Tap replies use preset lines</string>
+    <string name="speech_click_line_hint">On: a tap instantly says the line that comes with its animation, read aloud in voice mode. Off: the DSH whisper answers instead (needs DSH; falls back to the line pool without it).</string>
     <string name="update_check">Check for updates</string>
     <string name="update_checking">Checking…</string>
     <string name="update_latest">You are up to date</string>

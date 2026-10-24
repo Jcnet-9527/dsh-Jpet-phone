@@ -4,6 +4,17 @@ import android.content.Context
 import android.content.SharedPreferences
 import kotlin.random.Random
 
+/**
+ * What a tap says.
+ *
+ * [LINE] is the line the tap animation itself carries ("哼，不给薯片还想碰我？"):
+ * instant, and read out loud in voice mode. [DSH] hands the tap to the DSH
+ * whisper instead - slower and different every time, for people who want the
+ * model to do the talking. The two never fire together: whichever one owns the
+ * tap keeps the other quiet.
+ */
+enum class ClickReply { LINE, DSH }
+
 /** Phone-side preferences. Every optional capability has exactly one enable bit
  *  here, and that bit is what the module registry reads. */
 data class PetOptions(
@@ -14,6 +25,8 @@ data class PetOptions(
     val speechMinSeconds: Float = DEFAULT_MIN_SECONDS,
     val speechMaxSeconds: Float = DEFAULT_MAX_SECONDS,
     val speechSeconds: Float = DEFAULT_SPEECH_SECONDS,
+    /** Who answers a tap; see [ClickReply]. */
+    val clickReply: ClickReply = ClickReply.LINE,
     val clickSound: Boolean = true,
     val clickSoundVolume: Float = .7f,
     val clickSoundUri: String? = null,
@@ -57,6 +70,8 @@ data class PetOptions(
         const val DEFAULT_MIN_SECONDS = 20f
         const val DEFAULT_MAX_SECONDS = 60f
         const val DEFAULT_SPEECH_SECONDS = 3.2f
+        /** The animation group the five tap responses belong to. */
+        const val CLICK_GROUP = "click"
         const val MIN_SECONDS = 5f
         const val MAX_SECONDS = 600f
         const val MIN_SPEECH_SECONDS = 1f
@@ -138,6 +153,18 @@ data class PetOptions(
 
     fun speechDurationMs(): Long = (normalized().speechSeconds * 1000).toLong()
 
+    /**
+     * Whether [clip]'s own line is the thing this tap should say.
+     *
+     * The animation list carries one line per action; [ClickReply.DSH] hands the
+     * tap clips back to the DSH whisper, which is why they are excluded there.
+     * Every other line-bearing animation (the self-talk ones) still speaks its
+     * line in both modes - they never answer a tap.
+     */
+    fun clipLineActive(clip: ClipSpec): Boolean =
+        speech && clip.line.isNotBlank() &&
+            !(clickReply == ClickReply.DSH && clip.group == CLICK_GROUP)
+
     /** The single enable bit for each module; the module list and the user
      *  switches cannot disagree because both read this. */
     fun enables(moduleId: String): Boolean = when (moduleId) {
@@ -171,6 +198,7 @@ class PetPreferences(private val context: Context) {
         private const val KEY_SPEECH_MIN = "speechMin"
         private const val KEY_SPEECH_MAX = "speechMax"
         private const val KEY_SPEECH_SECONDS = "speechSeconds"
+        private const val KEY_CLICK_REPLY = "clickReply"
         private const val KEY_CLICK_SOUND = "clickSound"
         private const val KEY_CLICK_VOLUME = "clickVolume"
         private const val KEY_CLICK_URI = "clickUri"
@@ -202,7 +230,7 @@ class PetPreferences(private val context: Context) {
         private const val KEY_VOICE_SPEED = "voiceSpeed"
 
         val WATCHED_KEYS = setOf(KEY_SIZE, KEY_WANDER, KEY_SPEECH, KEY_PHRASES, KEY_SPEECH_MIN,
-            KEY_SPEECH_MAX, KEY_SPEECH_SECONDS, KEY_CLICK_SOUND, KEY_CLICK_VOLUME, KEY_CLICK_URI,
+            KEY_SPEECH_MAX, KEY_SPEECH_SECONDS, KEY_CLICK_REPLY, KEY_CLICK_SOUND, KEY_CLICK_VOLUME, KEY_CLICK_URI,
             KEY_COMPANIONS, KEY_COLLISION, KEY_COLLISION_RESTITUTION, KEY_CHAT, KEY_CHAT_BASE_URL,
             KEY_CHAT_API_KEY, KEY_CHAT_MODEL, KEY_CHAT_SYSTEM, KEY_CHAT_MEMORY, KEY_CHAT_BALANCE,
             KEY_PACK_AUTO, KEY_PACK_BASE_URL, KEY_EDGE_ALLOWANCE,
@@ -235,6 +263,9 @@ class PetPreferences(private val context: Context) {
         speechMinSeconds = prefs.getFloat(KEY_SPEECH_MIN, PetOptions.DEFAULT_MIN_SECONDS),
         speechMaxSeconds = prefs.getFloat(KEY_SPEECH_MAX, PetOptions.DEFAULT_MAX_SECONDS),
         speechSeconds = prefs.getFloat(KEY_SPEECH_SECONDS, PetOptions.DEFAULT_SPEECH_SECONDS),
+        clickReply = prefs.getString(KEY_CLICK_REPLY, null)
+            ?.let { name -> ClickReply.entries.firstOrNull { it.name == name } }
+            ?: ClickReply.LINE,
         clickSound = prefs.getBoolean(KEY_CLICK_SOUND, true),
         clickSoundVolume = prefs.getFloat(KEY_CLICK_VOLUME, .7f),
         clickSoundUri = prefs.getString(KEY_CLICK_URI, null),
@@ -283,6 +314,7 @@ class PetPreferences(private val context: Context) {
             .putFloat(KEY_SPEECH_MIN, normalized.speechMinSeconds)
             .putFloat(KEY_SPEECH_MAX, normalized.speechMaxSeconds)
             .putFloat(KEY_SPEECH_SECONDS, normalized.speechSeconds)
+            .putString(KEY_CLICK_REPLY, normalized.clickReply.name)
             .putBoolean(KEY_CLICK_SOUND, normalized.clickSound)
             .putFloat(KEY_CLICK_VOLUME, normalized.clickSoundVolume)
             .putString(KEY_CLICK_URI, normalized.clickSoundUri)

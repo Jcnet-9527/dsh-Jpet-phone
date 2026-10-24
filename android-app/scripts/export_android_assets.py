@@ -86,9 +86,32 @@ def publish_frames(jobs: list[tuple[Path, Path]], quality: int | None) -> None:
             pass
 
 
+def clip_line(name: str, lines: dict[str, str]) -> str:
+    """The line spoken while ``name`` plays, or "".
+
+    Three passes, in order of confidence: the exact clip name, the clip name
+    without its group prefix (``点击回应-傲娇生气`` -> ``傲娇生气``), and finally a
+    plain substring hit (``是啊，吃什么`` -> ``吃什么``). Being forgiving here is
+    deliberate: the action list is written by hand and a strict lookup silently
+    drops a whole line.
+    """
+    if not lines:
+        return ""
+    if name in lines:
+        return lines[name]
+    for key, text in lines.items():
+        if name.endswith("-" + key):
+            return text
+    for key, text in lines.items():
+        if key in name:
+            return text
+    return ""
+
+
 def export_prepared(videos: Path, prepared: dict[Path, Path], output: Path,
                     phrases: list[str], alias: dict[str, str] | None = None,
-                    quality: int | None = None) -> dict:
+                    quality: int | None = None,
+                    lines: dict[str, str] | None = None) -> dict:
     videos, output = videos.resolve(), output.resolve()
     if output == videos or videos in output.parents or output in videos.parents:
         raise ValueError("output overlaps the source package")
@@ -140,6 +163,7 @@ def export_prepared(videos: Path, prepared: dict[Path, Path], output: Path,
                       "path": f"clips/{identity}", "crop_box": crop,
                       "stride": float(movement.get("stride", 180)),
                       "curve": movement.get("curve", []),
+                      "line": clip_line(source.stem, lines or {}),
                       "_directory": directory})
     if canvas is None:
         raise ValueError("no frames")
@@ -202,8 +226,14 @@ def main() -> int:
     with ThreadPoolExecutor(max_workers=workers) as pool:
         for source, directory in pool.map(_prepare, list(hot_webms(videos, folders))):
             prepared[source] = directory
+    lines_file = videos / "clip_lines.json"
+    lines = ({k: str(v) for k, v in json.loads(lines_file.read_text(encoding="utf-8"))
+              .get("lines", {}).items()} if lines_file.exists() else {})
+    # Unlike upstream 0.6.3 the generic self-talk pool stays: the DSH whisper and
+    # the user's own lines both lean on it. A clip's own line simply wins while
+    # that clip is on screen.
     manifest = export_prepared(videos, prepared, args.output, DEFAULT_SELF_TALK_TEXTS,
-        quality=args.webp_quality)
+        quality=args.webp_quality, lines=lines)
     copy_notices(args.output)
     if args.res_output:
         idle = next(c for c in manifest["clips"] if c["group"] == "idle")

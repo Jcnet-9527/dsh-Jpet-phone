@@ -87,6 +87,7 @@ class MainActivity : ComponentActivity() {
     private var options by mutableStateOf(PetOptions())
     private var audioName by mutableStateOf<String?>(null)
     private var builtinCount by mutableStateOf(0)
+    private var lineCount by mutableStateOf(0)
     private var catalog by mutableStateOf<AssetCatalog?>(null)
     private var preview: ClickAudio? = null
     private var previewState by mutableStateOf(ClickAudio.State.IDLE)
@@ -101,6 +102,7 @@ class MainActivity : ComponentActivity() {
         audioName = resolveAudioName(options.clickSoundUri)
         catalog = runCatching { AssetCatalog.load(assets) }.getOrNull()
         builtinCount = catalog?.phrases?.size ?: 0
+        lineCount = catalog?.lineCount ?: 0
         askMicOnResume = intent?.getBooleanExtra(EXTRA_VOICE_PERMISSION, false) ?: false
         // Debug-only hook for automated checks: --ez shakeTest true
         if (BuildConfig.DEBUG && intent?.getBooleanExtra("shakeTest", false) == true) {
@@ -271,7 +273,7 @@ class MainActivity : ComponentActivity() {
                     WanderSection(options) { save(it) }
                     ShakeSection(options) { save(it) }
                     TouchSection(options) { save(it) }
-                    SpeechSection(options, builtinCount) { save(it) }
+                    SpeechSection(options, builtinCount, lineCount) { save(it) }
                     ClickSoundSection(options, audioName, { save(it) },
                         onPick = { audioPicker.launch(arrayOf("audio/*")) },
                         onPreview = ::previewSound,
