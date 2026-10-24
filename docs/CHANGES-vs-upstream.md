@@ -34,6 +34,13 @@
 | `scripts/export_android_assets.py` | 并发转帧（`PET_EXPORT_JOBS`）；读 `clip_lines.json` 把 `line` 写进每个 clip（**保留**上游已删的内置台词池） |
 | `android/app/src/test/.../PetOptionsTest.kt` | 跟上本仓库新增的 SHAKE 模块（上游测试早于它） |
 
+## 语音模型托管（不在上游）
+
+| 模型 | 存放 | 说明 |
+|---|---|---|
+| `tts-melo` | `ranw524/dsh-Jpet-voice` 的 `voice/melo.zip.001..003` | 44.1k int8，melo-tts 上游 Apache-2.0；模型 53 MB + 词典 55 MB，压成 44.7 MB 后切 3 段 |
+| asr / tts(baker) / xiaoya / chaowen | 上游 `Jcnet-9527/dsh-Jpet-phone-assets` | 未改动 |
+
 ## 上游 0.6.3 里**不采用**的部分
 
 | 上游改动 | 原因 |

@@ -28,6 +28,12 @@ data class VoiceModelSpec(
     val chunks: List<String>,
     /** Total bytes across all chunks, for progress reporting. */
     val bytes: Long,
+    /**
+     * Hosts that only serve this model, tried before the shared pack mirrors.
+     * The models that are not in the upstream assets repo (melo) live in our
+     * own voice repo, and the pack mirrors would just 404 on them.
+     */
+    val mirrors: List<String> = emptyList(),
 )
 
 /**
@@ -80,7 +86,7 @@ class VoiceModels(
             partial.mkdirs()
             var done = 0L
             for (chunk in spec.chunks) {
-                val wrote = fetchChunk(chunk, File(partial, "bundle.zip"), done != 0L)
+                val wrote = fetchChunk(chunk, File(partial, "bundle.zip"), done != 0L, spec)
                 if (wrote < 0L) return false
                 done += wrote
                 progress(done, spec.bytes)
@@ -98,8 +104,8 @@ class VoiceModels(
      * every mirror failed. [append] is false for the first chunk so a stale
      * bundle from an earlier attempt can never be grown by mistake.
      */
-    private fun fetchChunk(name: String, bundle: File, append: Boolean): Long {
-        for (base in baseUrls) {
+    private fun fetchChunk(name: String, bundle: File, append: Boolean, spec: VoiceModelSpec): Long {
+        for (base in spec.mirrors + baseUrls) {
             val trimmed = base.trim().trimEnd('/')
             if (trimmed.isEmpty()) continue
             try {
@@ -234,10 +240,31 @@ class VoiceModels(
             bytes = 20_930_646L,
         )
 
+        /**
+         * melo-tts (zh+en, 44.1 kHz, int8): the natural-sounding voice. It is not
+         * in the upstream assets repo, so it ships from our own voice repo and
+         * carries its own mirror list. The lexicon is large (~55 MB unpacked)
+         * but it is what gives the model its proper polyphone handling.
+         */
+        val MELO = VoiceModelSpec(
+            id = "tts-melo",
+            files = listOf("model.onnx", "lexicon.txt", "tokens.txt"),
+            chunks = listOf("melo.zip.001", "melo.zip.002", "melo.zip.003"),
+            bytes = 46_846_604L,
+            mirrors = listOf(
+                "https://gcore.jsdelivr.net/gh/ranw524/dsh-Jpet-voice@main/",
+                "https://testingcf.jsdelivr.net/gh/ranw524/dsh-Jpet-voice@main/",
+                "https://cdn.jsdelivr.net/gh/ranw524/dsh-Jpet-voice@main/",
+                "https://raw.githubusercontent.com/ranw524/dsh-Jpet-voice/main/",
+                "https://ghfast.top/raw.githubusercontent.com/ranw524/dsh-Jpet-voice/main/",
+            ),
+        )
+
         /** The TTS model behind a timbre id from [PetOptions.TIMBRES]. */
         fun ttsSpec(timbre: String): VoiceModelSpec = when (timbre) {
             PetOptions.TIMBRE_XIAOYA -> XIAOYA
             PetOptions.TIMBRE_CHAOWEN -> CHAOWEN
+            PetOptions.TIMBRE_MELO -> MELO
             else -> TTS
         }
 

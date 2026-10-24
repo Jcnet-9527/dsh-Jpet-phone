@@ -137,10 +137,11 @@
     <string name="voice_grant_mic">允许麦克风</string>
     <string name="voice_models_busy">正在下载…</string>
     <string name="voice_timbre">朗读音色</string>
-    <string name="voice_timbre_hint">选中哪个音色就用哪个声音朗读；换音色后第一次使用会下载对应模型。</string>
+    <string name="voice_timbre_hint">选中哪个音色就用哪个声音朗读；换音色后第一次使用会下载对应模型（melo 还要先花约 20 秒准备）。</string>
     <string name="voice_timbre_baker">甜甜</string>
     <string name="voice_timbre_xiaoya">小雅</string>
     <string name="voice_timbre_chaowen">超文</string>
+    <string name="voice_timbre_melo">melo（最自然）</string>
     <string name="voice_timbre_missing">这个音色的模型还没下载（约 %1$s）</string>
     <string name="voice_timbre_download">下载该音色</string>
     <string name="voice_preview">试听</string>

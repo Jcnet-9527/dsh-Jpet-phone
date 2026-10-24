@@ -145,10 +145,11 @@
     <string name="voice_grant_mic">Allow microphone</string>
     <string name="voice_models_busy">Downloading…</string>
     <string name="voice_timbre">Speaking voice</string>
-    <string name="voice_timbre_hint">The selected voice reads everything; switching downloads its model on first use.</string>
+    <string name="voice_timbre_hint">The selected voice reads everything; switching downloads its model on first use (melo needs ~20 s to warm up once).</string>
     <string name="voice_timbre_baker">Tiantian</string>
     <string name="voice_timbre_xiaoya">Xiaoya</string>
     <string name="voice_timbre_chaowen">Chaowen</string>
+    <string name="voice_timbre_melo">melo (natural)</string>
     <string name="voice_timbre_missing">This voice is not downloaded yet (%1$s)</string>
     <string name="voice_timbre_download">Download this voice</string>
     <string name="voice_preview">Preview</string>

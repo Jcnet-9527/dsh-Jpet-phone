@@ -65,12 +65,18 @@ object VoiceEngine {
     }
 
     /**
-     * Opens the TTS model of [timbre] from its unpacked directory. The default
-     * baker voice is a matcha model with a separate vocoder and a jieba dict;
-     * the alternative voices are piper VITS models that carry everything in
-     * one onnx plus a lexicon.
+     * Opens the TTS model of [timbre] from its unpacked directory.
+     *
+     * Three shapes share this code path: the default baker is a matcha model
+     * with a separate vocoder and a jieba dict; xiaoya/chaowen are piper VITS
+     * models with a lexicon and the rule fsts; melo is a VITS model whose own
+     * front end replaces both the jieba dict and the rule fsts. Everything is
+     * detected from the files that are actually on disk, so a model never asks
+     * sherpa-onnx for a file it does not ship (that crashes the native side
+     * rather than throwing).
      */
     fun speaker(dir: File, timbre: String = PetOptions.TIMBRE_BAKER): VoiceSpeaker {
+        val dict = File(dir, "dict")
         val model = if (timbre == PetOptions.TIMBRE_BAKER) {
             OfflineTtsModelConfig(
                 matcha = OfflineTtsMatchaModelConfig(
@@ -78,7 +84,7 @@ object VoiceEngine {
                     vocoder = File(dir, "vocoder.onnx").absolutePath,
                     lexicon = File(dir, "lexicon.txt").absolutePath,
                     tokens = File(dir, "tokens.txt").absolutePath,
-                    dictDir = File(dir, "dict").absolutePath,
+                    dictDir = dict.absolutePath,
                 ),
                 numThreads = 2,
                 debug = false,
@@ -89,6 +95,7 @@ object VoiceEngine {
                     model = File(dir, "model.onnx").absolutePath,
                     lexicon = File(dir, "lexicon.txt").absolutePath,
                     tokens = File(dir, "tokens.txt").absolutePath,
+                    dictDir = if (dict.isDirectory) dict.absolutePath else "",
                 ),
                 numThreads = 2,
                 debug = false,
@@ -97,12 +104,23 @@ object VoiceEngine {
         val config = OfflineTtsConfig(
             model = model,
             // Numbers, dates and phone numbers read properly ("2025年" is not
-            // "二零二五年" by accident); the fsts come with the model.
+            // "二零二五年" by accident). Only models that ship the fsts get them.
             ruleFsts = listOf("phone.fst", "date.fst", "number.fst")
-                .joinToString(",") { File(dir, it).absolutePath },
+                .map { File(dir, it) }.filter { it.isFile }
+                .joinToString(",") { it.absolutePath },
             maxNumSentences = 1,
         )
-        return SherpaSpeaker(OfflineTts(config = config))
+        return SherpaSpeaker(OfflineTts(config = config), gain = gainOf(timbre))
+    }
+
+    /**
+     * melo's raw output peaks around 0.13, which is barely audible next to the
+     * other voices at the same system volume. The gain is applied to the PCM we
+     * hand to the player; the clamp in [SherpaSpeaker] keeps it from wrapping.
+     */
+    private fun gainOf(timbre: String): Float = when (timbre) {
+        PetOptions.TIMBRE_MELO -> 6f
+        else -> 1f
     }
 
     /**
@@ -146,7 +164,8 @@ object VoiceEngine {
         }
     }
 
-    private class SherpaSpeaker(private val engine: OfflineTts) : VoiceSpeaker {
+    private class SherpaSpeaker(private val engine: OfflineTts,
+                                private val gain: Float = 1f) : VoiceSpeaker {
         private val gate = Any()
         private var closed = false
 
@@ -162,7 +181,7 @@ object VoiceEngine {
             val samples = audio.samples ?: return null
             val pcm = ShortArray(samples.size)
             for (i in samples.indices) {
-                val scaled = (samples[i] * 32767f).coerceIn(-32768f, 32767f)
+                val scaled = (samples[i] * 32767f * gain).coerceIn(-32768f, 32767f)
                 pcm[i] = scaled.toInt().toShort()
             }
             pcm

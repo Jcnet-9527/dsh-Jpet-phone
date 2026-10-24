@@ -8,7 +8,7 @@
 
 ---
 
-## 一、与上游的差异（7 组）
+## 一、与上游的差异（8 组）
 
 ### 1. 与 DSH 深度联动：余额 / 碎碎念 / 聊天
 - 新增 `DshClient.kt`：用 DSH 启动 token 换 cookie，调用 dsh-pet 宿主暴露的 HTTP 路由
@@ -72,6 +72,16 @@
 - `files/pet-events.log`：息屏/亮屏/自愈/看门狗/注入等事件留痕，用于排查"桌宠不见了"
 - 以上均由 `BuildConfig.DEBUG` 保护，**release 包不生效**
 
+### 8. 第四个音色：melo（新增）
+- 上游 3 个音色（甜甜 / 小雅 / 超文）之外，新增 `melo`（`TIMBRE_MELO`）：44.1 kHz、int8 量化（模型 53 MB + 词典 55 MB）、中英混读最自然
+- 模型不在上游 assets 仓库，放在我们自己的 **`ranw524/dsh-Jpet-voice`**（3 个 18 MB 分卷，`voice/melo.zip.001..003`）；
+  `VoiceModelSpec` 新增 `mirrors` 字段，让这个音色优先走自己的镜像（jsDelivr gcore/testingcf/cdn + raw + ghfast），不去撞上游的 404
+- `VoiceEngine.speaker()` 改成按磁盘上实际存在的文件决定配置：matcha / piper-VITS / melo-VITS 三种形态共用一条路径，
+  词典和 rule fsts 缺了就不传（缺文件传给 sherpa-onnx 是崩溃而不是异常）
+- melo 原始输出峰值只有 0.13，比其他音色小一截：播放前乘 6 倍增益（`SherpaSpeaker(gain=…)`），并靠 clamp 防溢出
+- melo 的 55 MB 词典首次解析约 20 秒：`VoiceModule.warmSpeaker()` 在语音模式打开时就后台预热，
+  设置页选音色的提示里也写明了「约 20 秒准备」
+
 ---
 
 ## 二、构建
@@ -116,6 +126,7 @@ cd android
 | `0.6.2-dsh.18` | 摇晃手感调优：阈值 3.4→2.0、倾斜增益 0.55→1.05、冲量 90+260s→160+560s |
 | `0.6.2-dsh.19` | 窗口跟随当前动画包围盒，不再吞掉其他 App 的点击；新增「点击穿透」开关 |
 | `0.6.3-dsh.20` | 合并上游 0.6.3：动作台词（10 句「深深」口吻）+ 点击回应开关 + 余额修复；内置台词池保留 |
+| `0.6.3-dsh.21` | 新增第 4 个音色 **melo**（44.1k、int8、中英混读最强）；自带镜像 + 复用音箱预热 |
 
 详细文件级改动见 [`docs/CHANGES-vs-upstream.md`](docs/CHANGES-vs-upstream.md)。
 

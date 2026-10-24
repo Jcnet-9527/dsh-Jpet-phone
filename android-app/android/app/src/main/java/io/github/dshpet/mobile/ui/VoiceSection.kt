@@ -201,6 +201,7 @@ fun VoiceSection(
 }
 
 private fun timbreLabel(timbre: String): Int = when (timbre) {
+    PetOptions.TIMBRE_MELO -> R.string.voice_timbre_melo
     PetOptions.TIMBRE_XIAOYA -> R.string.voice_timbre_xiaoya
     PetOptions.TIMBRE_CHAOWEN -> R.string.voice_timbre_chaowen
     else -> R.string.voice_timbre_baker

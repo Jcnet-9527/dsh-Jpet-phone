@@ -62,6 +62,7 @@ class VoiceModule : HostBoundModule() {
         VoiceBridge.speak = ::speakLine
         ensureVoiceModels()
         maybeShowButton()
+        warmSpeaker()
     }
 
     /**
@@ -129,6 +130,23 @@ class VoiceModule : HostBoundModule() {
         if (!alive.get()) return
         ensureVoiceModels()
         if (options.voiceChat) maybeShowButton() else VoiceBridge.hide?.invoke()
+        warmSpeaker()
+    }
+
+    /**
+     * Opens the TTS model before the first bubble needs it.
+     *
+     * melo's lexicon is 55 MB and takes ~20 s to parse on the phone. Loading it
+     * on the first sentence means the pet stays silent through an entire reply,
+     * which reads as "voice mode is broken"; loading it when the feature is
+     * switched on puts that cost where nobody is waiting for it.
+     */
+    private fun warmSpeaker() {
+        if (!host.options.voiceSpeak) return
+        onWorker {
+            if (!alive.get()) return@onWorker
+            ensureSpeaker()
+        }
     }
 
     override fun diagnostics(): String =

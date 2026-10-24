@@ -118,7 +118,9 @@ data class PetOptions(
         /** Piper zh_CN voices, both 22.05 kHz and small enough to fetch quickly. */
         const val TIMBRE_XIAOYA = "xiaoya"
         const val TIMBRE_CHAOWEN = "chaowen"
-        val TIMBRES = listOf(TIMBRE_BAKER, TIMBRE_XIAOYA, TIMBRE_CHAOWEN)
+        /** melo-tts: 44.1 kHz, int8, the most natural of the four. */
+        const val TIMBRE_MELO = "melo"
+        val TIMBRES = listOf(TIMBRE_BAKER, TIMBRE_XIAOYA, TIMBRE_CHAOWEN, TIMBRE_MELO)
     }
 
     /** A configured interval can never invert: min ≤ max, both inside range. */
